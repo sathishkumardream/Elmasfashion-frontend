@@ -841,7 +841,7 @@ input, select { font-family: inherit; }
   align-items: center;
   gap: 12px;
 }
-.size-guide { color: var(--brand); font-weight: 500; text-transform: none; letter-spacing: 0; }
+.size-guide { color: var(--brand); font-weight: 500; text-transform: none; letter-spacing: 0; background: none; border: none; padding: 0; cursor: pointer; font-size: inherit; font-family: inherit; }
 
 .color-options { display: flex; gap: 8px; flex-wrap: wrap; }
 .size-options { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -951,8 +951,8 @@ input, select { font-family: inherit; }
 }
 .footer p { font-size: 0.85rem; line-height: 1.7; }
 .footer ul { display: flex; flex-direction: column; gap: 8px; }
-.footer ul a { font-size: 0.85rem; transition: color var(--transition); }
-.footer ul a:hover { color: var(--brand-light); }
+.footer ul a, .footer-link { font-size: 0.85rem; transition: color var(--transition); cursor: pointer; }
+.footer ul a:hover, .footer-link:hover { color: var(--brand-light); }
 .social-links { display: flex; gap: 10px; margin-top: 14px; }
 .social-icon {
   width: 36px; height: 36px;

@@ -466,7 +466,7 @@ function ProductModal({ product, onClose, onWishlist, wishlist, onAddToCart }) {
               <div className="modal-section">
                 <p className="option-label">
                   Size&nbsp;
-                  <a href="#" className="size-guide" onClick={e => e.preventDefault()}>Size Guide</a>
+                  <button type="button" className="size-guide" onClick={e => e.preventDefault()}>Size Guide</button>
                 </p>
                 <div className="size-options">
                   {sizes.map(s => (
@@ -902,7 +902,7 @@ function AuthModal({ mode: initialMode, onClose, onAuth }) {
                   <span className="strength-label">{["Weak","Fair","Strong","Very Strong"][Math.min(3,form.password.length<6?0:form.password.length<8?1:/[A-Z]/.test(form.password)&&/\d/.test(form.password)?3:2)]}</span>
                 </div>
               )}
-              <p className="auth-terms">By registering you agree to our <a href="#" className="auth-link bold">Terms</a> and <a href="#" className="auth-link bold">Privacy Policy</a>.</p>
+              <p className="auth-terms">By registering you agree to our <span className="auth-link bold">Terms</span> and <span className="auth-link bold">Privacy Policy</span>.</p>
               <button className={`auth-submit-btn ${loading?"loading":""}`} onClick={handleSubmit} disabled={loading}>
                 {loading?<span className="auth-spinner"/>:"Create Account →"}
               </button>
@@ -1786,17 +1786,17 @@ export default function App() {
               </div>
               <div>
                 <h4>Quick Links</h4>
-                <ul>{["Men","Women","Boys","Girls","Made For You","Sale"].map(l=><li key={l}><a href="#">{l}</a></li>)}</ul>
+                <ul>{["Men","Women","Boys","Girls","Made For You","Sale"].map(l=><li key={l}><span className="footer-link">{l}</span></li>)}</ul>
               </div>
               <div>
                 <h4>Customer Care</h4>
-                <ul>{["My Orders","Custom Orders","Returns","Track Order","Size Guide","Contact Us"].map(l=><li key={l}><a href="#">{l}</a></li>)}</ul>
+                <ul>{["My Orders","Custom Orders","Returns","Track Order","Size Guide","Contact Us"].map(l=><li key={l}><span className="footer-link">{l}</span></li>)}</ul>
               </div>
               <div>
                 <h4>Connect</h4>
                 <p>📧 hello@elmasfashion.in</p><p>📞 1800-XXX-XXXX</p>
                 <div className="social-links">
-                  {["📘","📷","🐦","▶️"].map((s,i)=><a key={i} href="#" className="social-icon">{s}</a>)}
+                  {["📘","📷","🐦","▶️"].map((s,i)=><span key={i} className="social-icon">{s}</span>)}
                 </div>
               </div>
             </div>
