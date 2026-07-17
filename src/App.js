@@ -784,6 +784,22 @@ function MadeJustForYou({ onAddCustom }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // AUTH MODAL
 // ─────────────────────────────────────────────────────────────────────────────
+function AuthField({ id, label, type = "text", icon, rightEl, error, value, onChange, onEnter }) {
+  return (
+    <div className="auth-field">
+      <label className="auth-label">{label}</label>
+      <div className={`auth-input-wrap ${error?"error":""}`}>
+        <span className="auth-field-icon">{icon}</span>
+        <input type={type} value={value} onChange={e=>onChange(e.target.value)}
+          onKeyDown={e=>e.key==="Enter"&&onEnter&&onEnter()} placeholder={label}
+          className="auth-input" autoComplete={id==="password"||id==="confirm"?"new-password":id}/>
+        {rightEl}
+      </div>
+      {error&&<p className="auth-error">{error}</p>}
+    </div>
+  );
+}
+
 function AuthModal({ mode: initialMode, onClose, onAuth }) {
   const [mode, setMode] = useState(initialMode);
   const [form, setForm] = useState({ name:"", email:"", phone:"", password:"", confirm:"" });
@@ -827,19 +843,6 @@ function AuthModal({ mode: initialMode, onClose, onAuth }) {
       setErrors(e=>({...e, _general: err.message }));
     } finally { setLoading(false); }
   };
-  const Field=({id,label,type="text",icon,rightEl,error})=>(
-    <div className="auth-field">
-      <label className="auth-label">{label}</label>
-      <div className={`auth-input-wrap ${error?"error":""}`}>
-        <span className="auth-field-icon">{icon}</span>
-        <input type={type} value={form[id]} onChange={e=>set(id,e.target.value)}
-          onKeyDown={e=>e.key==="Enter"&&handleSubmit()} placeholder={label}
-          className="auth-input" autoComplete={id==="password"||id==="confirm"?"new-password":id}/>
-        {rightEl}
-      </div>
-      {error&&<p className="auth-error">{error}</p>}
-    </div>
-  );
   const eyeBtn=(show,toggle)=><button type="button" className="eye-btn" onClick={toggle}>{show?"🙈":"👁️"}</button>;
   return (
     <div className="modal-overlay auth-overlay" onClick={onClose}>
@@ -867,8 +870,8 @@ function AuthModal({ mode: initialMode, onClose, onAuth }) {
             <div className="auth-form">
               <h3 className="auth-form-title">Welcome back 👋</h3>
               <p className="auth-form-sub">Sign in to continue shopping</p>
-              <Field id="email" label="Email Address" icon="📧" error={errors.email}/>
-              <Field id="password" label="Password" type={showPass?"text":"password"} icon="🔒" rightEl={eyeBtn(showPass,()=>setShowPass(s=>!s))} error={errors.password}/>
+              <AuthField id="email" label="Email Address" icon="📧" error={errors.email} value={form.email} onChange={v=>set("email",v)} onEnter={handleSubmit}/>
+              <AuthField id="password" label="Password" type={showPass?"text":"password"} icon="🔒" rightEl={eyeBtn(showPass,()=>setShowPass(s=>!s))} error={errors.password} value={form.password} onChange={v=>set("password",v)} onEnter={handleSubmit}/>
               <div className="auth-row">
                 <label className="auth-check"><input type="checkbox"/> Remember me</label>
                 <button className="auth-link" onClick={()=>setMode("forgot")}>Forgot Password?</button>
@@ -888,11 +891,11 @@ function AuthModal({ mode: initialMode, onClose, onAuth }) {
             <div className="auth-form">
               <h3 className="auth-form-title">Create account ✨</h3>
               <p className="auth-form-sub">Join Elma's Fashion for exclusive benefits</p>
-              <Field id="name" label="Full Name" icon="👤" error={errors.name}/>
-              <Field id="email" label="Email Address" icon="📧" error={errors.email}/>
-              <Field id="phone" label="Mobile Number (optional)" icon="📱" error={errors.phone}/>
-              <Field id="password" label="Password" type={showPass?"text":"password"} icon="🔒" rightEl={eyeBtn(showPass,()=>setShowPass(s=>!s))} error={errors.password}/>
-              <Field id="confirm" label="Confirm Password" type={showConfirm?"text":"password"} icon="🔒" rightEl={eyeBtn(showConfirm,()=>setShowConfirm(s=>!s))} error={errors.confirm}/>
+              <AuthField id="name" label="Full Name" icon="👤" error={errors.name} value={form.name} onChange={v=>set("name",v)} onEnter={handleSubmit}/>
+              <AuthField id="email" label="Email Address" icon="📧" error={errors.email} value={form.email} onChange={v=>set("email",v)} onEnter={handleSubmit}/>
+              <AuthField id="phone" label="Mobile Number (optional)" icon="📱" error={errors.phone} value={form.phone} onChange={v=>set("phone",v)} onEnter={handleSubmit}/>
+              <AuthField id="password" label="Password" type={showPass?"text":"password"} icon="🔒" rightEl={eyeBtn(showPass,()=>setShowPass(s=>!s))} error={errors.password} value={form.password} onChange={v=>set("password",v)} onEnter={handleSubmit}/>
+              <AuthField id="confirm" label="Confirm Password" type={showConfirm?"text":"password"} icon="🔒" rightEl={eyeBtn(showConfirm,()=>setShowConfirm(s=>!s))} error={errors.confirm} value={form.confirm} onChange={v=>set("confirm",v)} onEnter={handleSubmit}/>
               {form.password&&(
                 <div className="pass-strength">
                   {["w","f","s","vs"].map((l,i)=>{
@@ -916,7 +919,7 @@ function AuthModal({ mode: initialMode, onClose, onAuth }) {
                 <>
                   <h3 className="auth-form-title">Reset Password 🔑</h3>
                   <p className="auth-form-sub">Enter your registered email and we'll send a reset link.</p>
-                  <Field id="email" label="Email Address" icon="📧" error={errors.email}/>
+                  <AuthField id="email" label="Email Address" icon="📧" error={errors.email} value={form.email} onChange={v=>set("email",v)} onEnter={handleSubmit}/>
                   <button className={`auth-submit-btn ${loading?"loading":""}`} onClick={handleSubmit} disabled={loading}>
                     {loading?<span className="auth-spinner"/>:"Send Reset Link →"}
                   </button>
