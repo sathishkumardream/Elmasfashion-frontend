@@ -1157,6 +1157,7 @@ input, select { font-family: inherit; }
 .auth-panel-right {
   padding: 32px 36px;
   overflow-y: auto;
+  min-height: 0;
   position: relative;
   display: flex;
   flex-direction: column;
