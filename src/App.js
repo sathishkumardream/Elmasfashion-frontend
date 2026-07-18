@@ -945,7 +945,7 @@ function UserDropdown({ user, onLogout, onClose, onNavigate }) {
         <div><p className="user-dropdown-name">{user.name}</p><p className="user-dropdown-email">{user.email}</p></div>
       </div>
       <div className="user-dropdown-divider"/>
-      {[{icon:"📦",label:"My Orders"},{icon:"🧵",label:"My Custom Orders"},{icon:"♥",label:"Wishlist",tab:"wishlist"},{icon:"📍",label:"Saved Addresses"},{icon:"💳",label:"Payment Methods"},{icon:"⚙️",label:"Account Settings"}].map(item=>(
+      {[{icon:"📦",label:"My Orders",tab:"myorders"},{icon:"🧵",label:"My Custom Orders"},{icon:"♥",label:"Wishlist",tab:"wishlist"},{icon:"📍",label:"Saved Addresses"},{icon:"💳",label:"Payment Methods"},{icon:"⚙️",label:"Account Settings"}].map(item=>(
         <button key={item.label} className="user-dropdown-item" onClick={item.tab ? ()=>{ onNavigate(item.tab); onClose(); } : undefined}>
           <span>{item.icon}</span>{item.label}
         </button>
@@ -959,7 +959,132 @@ function UserDropdown({ user, onLogout, onClose, onNavigate }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // CART PAGE
 // ─────────────────────────────────────────────────────────────────────────────
-function CartPage({ cartItems, onUpdateQty, onRemove, onClearCart, onContinue, onCheckout, user }) {
+// ─────────────────────────────────────────────────────────────────────────────
+// MY ORDERS (order history)
+// ─────────────────────────────────────────────────────────────────────────────
+const ORDER_STATUS_STEPS = ["PENDING", "PAID", "SHIPPED", "DELIVERED"];
+
+function MyOrdersPage({ user, onBrowse }) {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
+
+  const load = useCallback(() => {
+    if (!user?.token) { setLoading(false); return; }
+    setLoading(true);
+    setError(null);
+    fetch(`${API_BASE}/orders`, { headers: { Authorization: `Bearer ${user.token}` } })
+      .then(async res => {
+        const data = await res.json().catch(() => ([]));
+        if (!res.ok) throw new Error(data.error || data.message || "Failed to load orders");
+        return data;
+      })
+      .then(setOrders)
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [user?.token]);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (!user) {
+    return (
+      <div className="no-results">
+        <p>🔒</p><h3>Please sign in</h3>
+        <p>Sign in to view your order history.</p>
+      </div>
+    );
+  }
+
+  if (loading) return <LoadingGrid/>;
+  if (error) return <ErrorBanner message={error} onRetry={load}/>;
+
+  if (orders.length === 0) {
+    return (
+      <div className="no-results">
+        <p>📦</p><h3>No orders yet</h3>
+        <p>Once you place an order, it'll show up here.</p>
+        <button className="cta-primary" onClick={onBrowse}>Start Shopping</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="my-orders-page">
+      <div className="wishlist-header">
+        <h2>My Orders</h2>
+        <p>{orders.length} order{orders.length !== 1 ? "s" : ""}</p>
+      </div>
+      <div className="orders-list">
+        {orders.map(order => {
+          const isOpen = expandedId === order.id;
+          const stepIndex = ORDER_STATUS_STEPS.indexOf(order.status);
+          return (
+            <div key={order.id} className="order-card">
+              <button className="order-card-header" onClick={() => setExpandedId(isOpen ? null : order.id)}>
+                <div className="order-card-main">
+                  <span className="order-id">Order #ELM{String(order.id).padStart(6, "0")}</span>
+                  <span className="order-date">{new Date(order.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</span>
+                </div>
+                <div className="order-card-meta">
+                  <span className={`order-status-badge ${order.status}`}>{order.status}</span>
+                  <span className="order-total">₹{order.total.toLocaleString()}</span>
+                  <span className="order-expand-icon">{isOpen ? "▲" : "▼"}</span>
+                </div>
+              </button>
+
+              {isOpen && (
+                <div className="order-card-body">
+                  <div className="order-progress">
+                    {ORDER_STATUS_STEPS.map((step, i) => (
+                      <div key={step} className={`order-progress-step ${i <= stepIndex ? "done" : ""}`}>
+                        <span className="order-progress-dot"/>
+                        <span className="order-progress-label">{step}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="order-items-list">
+                    {order.orderItems.map(item => (
+                      <div key={item.id} className="order-item-row">
+                        <img src={item.product?.image} alt="" onError={e => { e.target.style.visibility = "hidden"; }}/>
+                        <div className="order-item-info">
+                          <span className="order-item-name">{item.product?.name || "Product no longer available"}</span>
+                          <span className="order-item-qty">Qty: {item.quantity} × ₹{item.price.toLocaleString()}</span>
+                        </div>
+                        <span className="order-item-total">₹{(item.quantity * item.price).toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="order-summary-box">
+                    <div className="order-summary-row"><span>Subtotal</span><span>₹{order.subtotal.toLocaleString()}</span></div>
+                    {order.discount > 0 && <div className="order-summary-row discount"><span>Discount</span><span>-₹{order.discount.toLocaleString()}</span></div>}
+                    <div className="order-summary-row"><span>Shipping</span><span>{order.shippingFee > 0 ? `₹${order.shippingFee}` : "Free"}</span></div>
+                    <div className="order-summary-row total"><span>Total</span><span>₹{order.total.toLocaleString()}</span></div>
+                  </div>
+
+                  {order.shippingLine1 && (
+                    <div className="order-shipping-box">
+                      <h4>Shipping Address</h4>
+                      <p>{order.shippingName} · {order.shippingPhone}</p>
+                      <p>{order.shippingLine1}{order.shippingLine2 ? `, ${order.shippingLine2}` : ""}</p>
+                      <p>{order.shippingCity}, {order.shippingState} {order.shippingPincode}</p>
+                    </div>
+                  )}
+
+                  <p className="order-payment-method">Payment: {order.paymentMethod}</p>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function CartPage({ cartItems, onUpdateQty, onRemove, onClearCart, onContinue, onCheckout, onGoToOrders, user }) {
   const cartCount = cartItems.reduce((sum, item) => sum + item.qty, 0);
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState(null); // { code, type, value, discount, waiveShipping }
@@ -1098,7 +1223,7 @@ function CartPage({ cartItems, onUpdateQty, onRemove, onClearCart, onContinue, o
           </div>
           <div className="success-actions">
             <button className="cta-primary" onClick={onContinue}>Continue Shopping</button>
-            <button className="btn-cart" style={{padding:"13px 24px",borderRadius:10,background:"var(--surface2)",color:"var(--text)"}}>Track Order</button>
+            <button className="btn-cart" style={{padding:"13px 24px",borderRadius:10,background:"var(--surface2)",color:"var(--text)"}} onClick={onGoToOrders}>Track Order</button>
           </div>
         </div>
       </div>
@@ -1917,6 +2042,11 @@ export default function App() {
         </div>
       )}
 
+      {/* ══ MY ORDERS ══ */}
+      {activeTab==="myorders" && (
+        <MyOrdersPage user={user} onBrowse={()=>setActiveTab("collection")}/>
+      )}
+
       {/* ══ WISHLIST ══ */}
       {activeTab==="wishlist" && (
         <div className="wishlist-page">
@@ -1954,6 +2084,7 @@ export default function App() {
           onClearCart={clearCart}
           onContinue={() => setActiveTab("collection")}
           onCheckout={() => setActiveTab("cart")}
+          onGoToOrders={() => setActiveTab("myorders")}
           user={user}
         />
       )}
