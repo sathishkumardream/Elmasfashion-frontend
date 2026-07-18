@@ -5,7 +5,7 @@ import "./App.css";
 // ─────────────────────────────────────────────────────────────────────────────
 // API CONFIG
 // ─────────────────────────────────────────────────────────────────────────────
-const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
+const API_BASE = (process.env.REACT_APP_API_URL || "http://localhost:5000/api").replace(/\/+$/, "");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DATA NORMALISER
@@ -25,9 +25,8 @@ function normaliseProduct(p) {
   // Map category name → nav key (lowercase, trimmed)
   const categoryKey = categoryName.toLowerCase().trim();
 
-  // originalPrice: backend has no originalPrice — derive a display MRP (~30% above price)
-  // If you later add originalPrice to schema, this just passes it through.
-  const originalPrice = p.originalPrice ?? Math.round(p.price * 1.3);
+  // originalPrice: only show a "was" price if the admin actually set one (real MRP, not a fake markup)
+  const originalPrice = p.originalPrice && p.originalPrice > p.price ? p.originalPrice : null;
 
   // rating & reviews: not in schema → use stock-seeded placeholder until you add reviews model
   const rating = p.rating ?? parseFloat((3.8 + (p.id % 12) * 0.1).toFixed(1));
@@ -36,15 +35,15 @@ function normaliseProduct(p) {
   // badge: derive from stock level or name keywords
   const badge = p.badge ?? deriveBadge(p, rating);
 
-  // colors[]: not in schema → default neutral palette; extend schema with JSON field later
-  const colors = Array.isArray(p.colors) && p.colors.length
-    ? p.colors
-    : ["#2c3e50", "#c9184a", "#f5a623"];
+  // colors[]: only shown if the admin actually entered some (comma-separated hex codes)
+  const colors = typeof p.colors === "string" && p.colors.trim()
+    ? p.colors.split(",").map(c => c.trim()).filter(Boolean)
+    : [];
 
-  // sizes[]: not in schema → derive from category; extend schema with JSON field later
-  const sizes = Array.isArray(p.sizes) && p.sizes.length
-    ? p.sizes
-    : deriveSizes(categoryKey);
+  // sizes[]: only shown if the admin actually entered some (comma-separated, e.g. "S,M,L,XL")
+  const sizes = typeof p.sizes === "string" && p.sizes.trim()
+    ? p.sizes.split(",").map(s => s.trim()).filter(Boolean)
+    : [];
 
   // subcategory: not in schema → can be added as a field later; default to ""
   const subcategory = p.subcategory ?? "";
@@ -81,19 +80,6 @@ function deriveBadge(p, rating) {
   if (rating >= 4.7) return "Bestseller";
   if (p.stock > 100) return "Hot";
   return null;
-}
-
-function deriveSizes(categoryKey) {
-  if (categoryKey === "boys" || categoryKey === "girls") {
-    return ["2-3Y", "4-5Y", "6-7Y", "8-9Y", "10-11Y"];
-  }
-  if (categoryKey === "women") {
-    return ["XS", "S", "M", "L", "XL"];
-  }
-  if (categoryKey === "men") {
-    return ["S", "M", "L", "XL", "XXL"];
-  }
-  return ["S", "M", "L", "XL"];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -324,12 +310,14 @@ function ProductCard({ product, onView, onWishlist, wishlist, onAddToCart }) {
           )}
         </div>
 
-        <div className="card-colors">
-          {product.colors.slice(0, 4).map((c, i) => (
-            <span key={i} className="color-dot"
-              style={{ background: c, border: c === "#fff" ? "1px solid #ccc" : "none" }} />
-          ))}
-        </div>
+        {product.colors.length > 0 && (
+          <div className="card-colors">
+            {product.colors.slice(0, 4).map((c, i) => (
+              <span key={i} className="color-dot"
+                style={{ background: c, border: c === "#fff" ? "1px solid #ccc" : "none" }} />
+            ))}
+          </div>
+        )}
 
         <button
           className="add-cart-btn"
@@ -347,7 +335,7 @@ function ProductCard({ product, onView, onWishlist, wishlist, onAddToCart }) {
 // PRODUCT MODAL
 // Fixed to handle real backend shape safely.
 // ─────────────────────────────────────────────────────────────────────────────
-function ProductModal({ product, onClose, onWishlist, wishlist, onAddToCart }) {
+function ProductModal({ product, onClose, onWishlist, wishlist, onAddToCart, onBuyNow }) {
   const [selSize, setSelSize] = useState(null);
   const [selColor, setSelColor] = useState(0);
   const [qty, setQty] = useState(1);
@@ -382,6 +370,17 @@ function ProductModal({ product, onClose, onWishlist, wishlist, onAddToCart }) {
       setCartMsg({ type: "error", text: err.message || "Failed to add to cart" });
     }
     setTimeout(() => setCartMsg(null), 2500);
+  };
+
+  const handleBuyNow = async () => {
+    setCartMsg(null);
+    try {
+      await onAddToCart(product, qty);
+      onBuyNow();
+    } catch (err) {
+      setCartMsg({ type: "error", text: err.message || "Failed to add to cart" });
+      setTimeout(() => setCartMsg(null), 2500);
+    }
   };
 
   return (
@@ -516,7 +515,7 @@ function ProductModal({ product, onClose, onWishlist, wishlist, onAddToCart }) {
               <button
                 className="btn-buy"
                 disabled={!product.inStock}
-                onClick={handleAddToCart}
+                onClick={handleBuyNow}
               >
                 ⚡ Buy Now
               </button>
@@ -534,12 +533,6 @@ function ProductModal({ product, onClose, onWishlist, wishlist, onAddToCart }) {
               <span>↩️ 7-Day Returns</span>
               <span>✅ 100% Genuine</span>
             </div>
-
-            {/* Debug info — remove in production */}
-            <details className="dev-info">
-              <summary>Dev — Raw fields</summary>
-              <pre>{JSON.stringify({ id:product.id, categoryId:product.categoryId, stock:product.stock, price:product.price, createdAt:product.createdAt }, null, 2)}</pre>
-            </details>
           </div>
         </div>
       </div>
@@ -784,6 +777,22 @@ function MadeJustForYou({ onAddCustom }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // AUTH MODAL
 // ─────────────────────────────────────────────────────────────────────────────
+function AuthField({ id, label, type = "text", icon, rightEl, error, value, onChange, onEnter }) {
+  return (
+    <div className="auth-field">
+      <label className="auth-label">{label}</label>
+      <div className={`auth-input-wrap ${error?"error":""}`}>
+        <span className="auth-field-icon">{icon}</span>
+        <input type={type} value={value} onChange={e=>onChange(e.target.value)}
+          onKeyDown={e=>e.key==="Enter"&&onEnter&&onEnter()} placeholder={label}
+          className="auth-input" autoComplete={id==="password"||id==="confirm"?"new-password":id}/>
+        {rightEl}
+      </div>
+      {error&&<p className="auth-error">{error}</p>}
+    </div>
+  );
+}
+
 function AuthModal({ mode: initialMode, onClose, onAuth }) {
   const [mode, setMode] = useState(initialMode);
   const [form, setForm] = useState({ name:"", email:"", phone:"", password:"", confirm:"" });
@@ -813,12 +822,12 @@ function AuthModal({ mode: initialMode, onClose, onAuth }) {
       if(mode==="login"){
         const res=await fetch(`${API_BASE}/auth/login`,{ method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({email:form.email,password:form.password}) });
         const data=await res.json();
-        if(!res.ok) throw new Error(data.message||"Login failed");
+        if(!res.ok) throw new Error(data.message||data.error||"Login failed");
         onAuth({ name:data.user?.name||form.email.split("@")[0], email:form.email, token:data.token }); onClose();
       } else if(mode==="register"){
         const res=await fetch(`${API_BASE}/auth/register`,{ method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({name:form.name,email:form.email,phone:form.phone,password:form.password}) });
         const data=await res.json();
-        if(!res.ok) throw new Error(data.message||"Registration failed");
+        if(!res.ok) throw new Error(data.message||data.error||"Registration failed");
         onAuth({ name:form.name, email:form.email, token:data.token }); onClose();
       } else {
         await new Promise(r=>setTimeout(r,800)); setForgotSent(true);
@@ -827,19 +836,6 @@ function AuthModal({ mode: initialMode, onClose, onAuth }) {
       setErrors(e=>({...e, _general: err.message }));
     } finally { setLoading(false); }
   };
-  const Field=({id,label,type="text",icon,rightEl,error})=>(
-    <div className="auth-field">
-      <label className="auth-label">{label}</label>
-      <div className={`auth-input-wrap ${error?"error":""}`}>
-        <span className="auth-field-icon">{icon}</span>
-        <input type={type} value={form[id]} onChange={e=>set(id,e.target.value)}
-          onKeyDown={e=>e.key==="Enter"&&handleSubmit()} placeholder={label}
-          className="auth-input" autoComplete={id==="password"||id==="confirm"?"new-password":id}/>
-        {rightEl}
-      </div>
-      {error&&<p className="auth-error">{error}</p>}
-    </div>
-  );
   const eyeBtn=(show,toggle)=><button type="button" className="eye-btn" onClick={toggle}>{show?"🙈":"👁️"}</button>;
   return (
     <div className="modal-overlay auth-overlay" onClick={onClose}>
@@ -867,8 +863,8 @@ function AuthModal({ mode: initialMode, onClose, onAuth }) {
             <div className="auth-form">
               <h3 className="auth-form-title">Welcome back 👋</h3>
               <p className="auth-form-sub">Sign in to continue shopping</p>
-              <Field id="email" label="Email Address" icon="📧" error={errors.email}/>
-              <Field id="password" label="Password" type={showPass?"text":"password"} icon="🔒" rightEl={eyeBtn(showPass,()=>setShowPass(s=>!s))} error={errors.password}/>
+              <AuthField id="email" label="Email Address" icon="📧" error={errors.email} value={form.email} onChange={v=>set("email",v)} onEnter={handleSubmit}/>
+              <AuthField id="password" label="Password" type={showPass?"text":"password"} icon="🔒" rightEl={eyeBtn(showPass,()=>setShowPass(s=>!s))} error={errors.password} value={form.password} onChange={v=>set("password",v)} onEnter={handleSubmit}/>
               <div className="auth-row">
                 <label className="auth-check"><input type="checkbox"/> Remember me</label>
                 <button className="auth-link" onClick={()=>setMode("forgot")}>Forgot Password?</button>
@@ -888,11 +884,11 @@ function AuthModal({ mode: initialMode, onClose, onAuth }) {
             <div className="auth-form">
               <h3 className="auth-form-title">Create account ✨</h3>
               <p className="auth-form-sub">Join Elma's Fashion for exclusive benefits</p>
-              <Field id="name" label="Full Name" icon="👤" error={errors.name}/>
-              <Field id="email" label="Email Address" icon="📧" error={errors.email}/>
-              <Field id="phone" label="Mobile Number (optional)" icon="📱" error={errors.phone}/>
-              <Field id="password" label="Password" type={showPass?"text":"password"} icon="🔒" rightEl={eyeBtn(showPass,()=>setShowPass(s=>!s))} error={errors.password}/>
-              <Field id="confirm" label="Confirm Password" type={showConfirm?"text":"password"} icon="🔒" rightEl={eyeBtn(showConfirm,()=>setShowConfirm(s=>!s))} error={errors.confirm}/>
+              <AuthField id="name" label="Full Name" icon="👤" error={errors.name} value={form.name} onChange={v=>set("name",v)} onEnter={handleSubmit}/>
+              <AuthField id="email" label="Email Address" icon="📧" error={errors.email} value={form.email} onChange={v=>set("email",v)} onEnter={handleSubmit}/>
+              <AuthField id="phone" label="Mobile Number (optional)" icon="📱" error={errors.phone} value={form.phone} onChange={v=>set("phone",v)} onEnter={handleSubmit}/>
+              <AuthField id="password" label="Password" type={showPass?"text":"password"} icon="🔒" rightEl={eyeBtn(showPass,()=>setShowPass(s=>!s))} error={errors.password} value={form.password} onChange={v=>set("password",v)} onEnter={handleSubmit}/>
+              <AuthField id="confirm" label="Confirm Password" type={showConfirm?"text":"password"} icon="🔒" rightEl={eyeBtn(showConfirm,()=>setShowConfirm(s=>!s))} error={errors.confirm} value={form.confirm} onChange={v=>set("confirm",v)} onEnter={handleSubmit}/>
               {form.password&&(
                 <div className="pass-strength">
                   {["w","f","s","vs"].map((l,i)=>{
@@ -916,7 +912,7 @@ function AuthModal({ mode: initialMode, onClose, onAuth }) {
                 <>
                   <h3 className="auth-form-title">Reset Password 🔑</h3>
                   <p className="auth-form-sub">Enter your registered email and we'll send a reset link.</p>
-                  <Field id="email" label="Email Address" icon="📧" error={errors.email}/>
+                  <AuthField id="email" label="Email Address" icon="📧" error={errors.email} value={form.email} onChange={v=>set("email",v)} onEnter={handleSubmit}/>
                   <button className={`auth-submit-btn ${loading?"loading":""}`} onClick={handleSubmit} disabled={loading}>
                     {loading?<span className="auth-spinner"/>:"Send Reset Link →"}
                   </button>
@@ -940,7 +936,7 @@ function AuthModal({ mode: initialMode, onClose, onAuth }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // USER DROPDOWN
 // ─────────────────────────────────────────────────────────────────────────────
-function UserDropdown({ user, onLogout, onClose }) {
+function UserDropdown({ user, onLogout, onClose, onNavigate }) {
   useEffect(()=>{ const h=()=>onClose(); document.addEventListener("click",h); return()=>document.removeEventListener("click",h); },[onClose]);
   return (
     <div className="user-dropdown" onClick={e=>e.stopPropagation()}>
@@ -949,8 +945,10 @@ function UserDropdown({ user, onLogout, onClose }) {
         <div><p className="user-dropdown-name">{user.name}</p><p className="user-dropdown-email">{user.email}</p></div>
       </div>
       <div className="user-dropdown-divider"/>
-      {[{icon:"📦",label:"My Orders"},{icon:"🧵",label:"My Custom Orders"},{icon:"♥",label:"Wishlist"},{icon:"📍",label:"Saved Addresses"},{icon:"💳",label:"Payment Methods"},{icon:"⚙️",label:"Account Settings"}].map(item=>(
-        <button key={item.label} className="user-dropdown-item"><span>{item.icon}</span>{item.label}</button>
+      {[{icon:"📦",label:"My Orders"},{icon:"🧵",label:"My Custom Orders"},{icon:"♥",label:"Wishlist",tab:"wishlist"},{icon:"📍",label:"Saved Addresses"},{icon:"💳",label:"Payment Methods"},{icon:"⚙️",label:"Account Settings"}].map(item=>(
+        <button key={item.label} className="user-dropdown-item" onClick={item.tab ? ()=>{ onNavigate(item.tab); onClose(); } : undefined}>
+          <span>{item.icon}</span>{item.label}
+        </button>
       ))}
       <div className="user-dropdown-divider"/>
       <button className="user-dropdown-item logout" onClick={onLogout}><span>🚪</span>Sign Out</button>
@@ -1637,7 +1635,7 @@ export default function App() {
             )}
           </div>
 
-          <button className="nav-icon-btn" title="Wishlist" onClick={()=>navigateTo("collection")}>
+          <button className="nav-icon-btn" title="Wishlist" onClick={()=>setActiveTab("wishlist")}>
             ♥ <span className="badge-count">{wishlist.length}</span>
           </button>
           <button className="nav-icon-btn cart-btn" title="Cart" onClick={()=>setActiveTab("cart")}>
@@ -1651,7 +1649,8 @@ export default function App() {
                 <span className="user-name-short">{user.name.split(" ")[0]}</span>
                 <span className="drop-caret">{userDropOpen?"▲":"▼"}</span>
               </button>
-              {userDropOpen&&<UserDropdown user={user} onLogout={() => { localStorage.removeItem("user"); localStorage.removeItem("token"); setUser(null);
+              {userDropOpen&&<UserDropdown user={user} onNavigate={(tab)=>setActiveTab(tab)} onLogout={() => { localStorage.removeItem("user"); localStorage.removeItem("token"); setUser(null);
+  clearCart(); setWishlist([]);
   setUserDropOpen(false);
 }} onClose={()=>setUserDropOpen(false)}/>}
             </div>
@@ -1918,6 +1917,29 @@ export default function App() {
         </div>
       )}
 
+      {/* ══ WISHLIST ══ */}
+      {activeTab==="wishlist" && (
+        <div className="wishlist-page">
+          <div className="wishlist-header">
+            <h2>My Wishlist</h2>
+            <p>{wishlist.length} {wishlist.length === 1 ? "item" : "items"} saved</p>
+          </div>
+          {products.filter(p => wishlist.includes(p.id)).length === 0 ? (
+            <div className="no-results">
+              <p>♡</p><h3>Your wishlist is empty</h3>
+              <p>Tap the heart icon on any product to save it here.</p>
+              <button className="cta-primary" onClick={() => setActiveTab("collection")}>Browse Products</button>
+            </div>
+          ) : (
+            <div className="products-grid">
+              {products.filter(p => wishlist.includes(p.id)).map(p => (
+                <ProductCard key={p.id} product={p} onView={setViewProduct} onWishlist={toggleWishlist} wishlist={wishlist} onAddToCart={handleAddToCart}/>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ══ MADE JUST FOR YOU ══ */}
       {activeTab==="madejustforyou" && (
         <MadeJustForYou onAddCustom={()=>setCartItems(prev=>[...prev,{ key:`custom-${Date.now()}`, product:{ id:`custom-${Date.now()}`, name:"Custom Stitched Outfit", price:0, image:"https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=400&q=80", category:"Custom", inStock:true, stock:1, description:"Custom stitch order" }, qty:1, size:null, color:0, isCustom:true }])}/>
@@ -1944,6 +1966,7 @@ export default function App() {
           onWishlist={toggleWishlist}
           wishlist={wishlist}
           onAddToCart={handleAddToCart}
+          onBuyNow={()=>{ setViewProduct(null); setActiveTab("cart"); }}
         />
       )}
       {authModal && (

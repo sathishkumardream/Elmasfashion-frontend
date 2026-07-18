@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import "./App.css";
 import "./AdminApp.css";
 
-const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:5000/api";
+const API_BASE = (process.env.REACT_APP_API_URL || "http://localhost:5000/api").replace(/\/+$/, "");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // API HELPER
@@ -249,7 +249,9 @@ function Dashboard({ token }) {
 // ─────────────────────────────────────────────────────────────────────────────
 function ProductForm({ initial, categories, onSave, onCancel, saving, error }) {
   const [form, setForm] = useState(
-    initial || { name: "", description: "", price: "", stock: "", image: "", categoryId: categories[0]?.id || "" }
+    initial
+      ? { ...initial, originalPrice: initial.originalPrice ?? "", sizes: initial.sizes ?? "", colors: initial.colors ?? "" }
+      : { name: "", description: "", price: "", originalPrice: "", stock: "", image: "", sizes: "", colors: "", categoryId: categories[0]?.id || "" }
   );
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -272,13 +274,27 @@ function ProductForm({ initial, categories, onSave, onCancel, saving, error }) {
             <input type="number" value={form.price} onChange={(e) => set("price", e.target.value)} />
           </div>
           <div className="admin-form-row">
-            <label>Stock</label>
-            <input type="number" value={form.stock} onChange={(e) => set("stock", e.target.value)} />
+            <label>Original / MRP (₹, optional)</label>
+            <input type="number" value={form.originalPrice} onChange={(e) => set("originalPrice", e.target.value)} placeholder="Leave blank if not on sale" />
           </div>
+        </div>
+        <div className="admin-form-row">
+          <label>Stock</label>
+          <input type="number" value={form.stock} onChange={(e) => set("stock", e.target.value)} />
         </div>
         <div className="admin-form-row">
           <label>Image URL</label>
           <input value={form.image} onChange={(e) => set("image", e.target.value)} placeholder="https://..." />
+        </div>
+        <div className="admin-two-col">
+          <div className="admin-form-row">
+            <label>Sizes (optional)</label>
+            <input value={form.sizes} onChange={(e) => set("sizes", e.target.value)} placeholder="e.g. S,M,L,XL" />
+          </div>
+          <div className="admin-form-row">
+            <label>Colors (optional)</label>
+            <input value={form.colors} onChange={(e) => set("colors", e.target.value)} placeholder="e.g. #2c3e50,#c9184a" />
+          </div>
         </div>
         <div className="admin-form-row">
           <label>Category</label>
@@ -294,6 +310,7 @@ function ProductForm({ initial, categories, onSave, onCancel, saving, error }) {
             onClick={() => onSave({
               ...form,
               price: Number(form.price),
+              originalPrice: form.originalPrice ? Number(form.originalPrice) : null,
               stock: Number(form.stock),
               categoryId: Number(form.categoryId),
             })}

@@ -538,6 +538,7 @@ input, select { font-family: inherit; }
   transform: translateY(4px);
 }
 .product-card:hover .add-cart-btn { opacity: 1; transform: translateY(0); background: var(--brand); }
+.add-cart-btn:disabled { opacity: 1 !important; background: #d1d5db !important; color: #6b7280 !important; cursor: not-allowed; transform: none !important; }
 
 /* ─── Promo Banner ───────────────────────────────────────────────────────────── */
 .promo-banner {
@@ -762,6 +763,12 @@ input, select { font-family: inherit; }
 }
 .no-results p { color: var(--text-muted); margin-bottom: 24px; }
 
+.wishlist-page { max-width: 1280px; margin: 0 auto; padding: 40px 24px 80px; }
+.wishlist-header { text-align: center; margin-bottom: 32px; }
+.wishlist-header h2 { font-family: 'Playfair Display', serif; font-size: 2rem; margin-bottom: 6px; }
+.wishlist-header p { color: var(--text-muted); }
+.wishlist-page .products-grid { padding: 0; }
+
 /* ─── Product Modal ──────────────────────────────────────────────────────────── */
 .modal-overlay {
   position: fixed;
@@ -895,7 +902,8 @@ input, select { font-family: inherit; }
   font-size: 0.9rem;
   transition: all var(--transition);
 }
-.btn-cart:hover { background: var(--mid); }
+.btn-cart:hover:not(:disabled) { background: var(--mid); }
+.btn-cart:disabled { background: #d1d5db; color: #6b7280; cursor: not-allowed; box-shadow: none; }
 .btn-buy {
   flex: 1;
   padding: 12px;
@@ -907,7 +915,8 @@ input, select { font-family: inherit; }
   transition: all var(--transition);
   box-shadow: 0 4px 16px rgba(201,24,74,0.35);
 }
-.btn-buy:hover { background: var(--brand-dark); transform: translateY(-1px); }
+.btn-buy:hover:not(:disabled) { background: var(--brand-dark); transform: translateY(-1px); }
+.btn-buy:disabled { background: #d1d5db; color: #6b7280; cursor: not-allowed; box-shadow: none; }
 .btn-wish {
   width: 44px;
   height: 44px;
@@ -1098,7 +1107,7 @@ input, select { font-family: inherit; }
   border-radius: 20px;
   max-width: 860px;
   width: 100%;
-  max-height: 94vh;
+  height: min(94vh, 640px);
   overflow: hidden;
   display: grid;
   grid-template-columns: 280px 1fr;
@@ -1157,6 +1166,7 @@ input, select { font-family: inherit; }
 .auth-panel-right {
   padding: 32px 36px;
   overflow-y: auto;
+  min-height: 0;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -1348,7 +1358,7 @@ input, select { font-family: inherit; }
 
 /* ─── Auth Responsive ────────────────────────────────────────────────────────── */
 @media (max-width: 700px) {
-  .auth-box { grid-template-columns: 1fr; max-height: 95vh; }
+  .auth-box { grid-template-columns: 1fr; height: min(95vh, 640px); }
   .auth-panel-left { display: none; }
   .auth-panel-right { padding: 24px 20px; }
   .auth-nav-btns { gap: 6px; }
