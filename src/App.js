@@ -830,7 +830,10 @@ function AuthModal({ mode: initialMode, onClose, onAuth }) {
         if(!res.ok) throw new Error(data.message||data.error||"Registration failed");
         onAuth({ name:form.name, email:form.email, token:data.token }); onClose();
       } else {
-        await new Promise(r=>setTimeout(r,800)); setForgotSent(true);
+        const res=await fetch(`${API_BASE}/auth/forgot-password`,{ method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({email:form.email}) });
+        const data=await res.json();
+        if(!res.ok) throw new Error(data.message||data.error||"Failed to send reset link");
+        setForgotSent(true);
       }
     } catch(err){
       setErrors(e=>({...e, _general: err.message }));
@@ -1566,6 +1569,99 @@ function CartPage({ cartItems, onUpdateQty, onRemove, onClearCart, onContinue, o
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN APP
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// RESET PASSWORD PAGE (reached via the link emailed by /forgot-password)
+// ─────────────────────────────────────────────────────────────────────────────
+export function ResetPasswordPage() {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get("token") || "";
+
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    if (!token) { setError("This reset link is missing its token. Please request a new one."); return; }
+    if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
+    if (password !== confirm) { setError("Passwords do not match."); return; }
+
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || data.error || "Failed to reset password");
+      setDone(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="reset-password-page">
+      <div className="reset-password-box">
+        <div className="auth-brand" style={{ justifyContent: "center", marginBottom: 24 }}>
+          <span className="auth-brand-icon">✦</span><h2>ELMA'S FASHION</h2>
+        </div>
+
+        {done ? (
+          <div className="forgot-success">
+            <div className="success-icon">✅</div>
+            <h3>Password reset!</h3>
+            <p>You can now sign in with your new password.</p>
+            <a className="cta-primary" href="/" style={{ display: "inline-block", marginTop: 16, textDecoration: "none" }}>
+              Go to Homepage
+            </a>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit}>
+            <h3 className="auth-form-title">Set a new password 🔑</h3>
+            <p className="auth-form-sub">Choose a new password for your account.</p>
+            {error && <div className="auth-general-error">⚠️ {error}</div>}
+
+            <div className="auth-field">
+              <label className="auth-label">New Password</label>
+              <div className="auth-input-wrap">
+                <span className="auth-field-icon">🔒</span>
+                <input type={showPass ? "text" : "password"} value={password}
+                  onChange={e => setPassword(e.target.value)} placeholder="New Password"
+                  className="auth-input" autoComplete="new-password" />
+                <button type="button" className="eye-btn" onClick={() => setShowPass(s => !s)}>{showPass ? "🙈" : "👁️"}</button>
+              </div>
+            </div>
+
+            <div className="auth-field">
+              <label className="auth-label">Confirm Password</label>
+              <div className="auth-input-wrap">
+                <span className="auth-field-icon">🔒</span>
+                <input type={showPass ? "text" : "password"} value={confirm}
+                  onChange={e => setConfirm(e.target.value)} placeholder="Confirm Password"
+                  className="auth-input" autoComplete="new-password" />
+              </div>
+            </div>
+
+            <button type="submit" className={`auth-submit-btn ${loading ? "loading" : ""}`} disabled={loading}>
+              {loading ? <span className="auth-spinner" /> : "Reset Password →"}
+            </button>
+          </form>
+        )}
+
+        {!done && <a className="auth-back-link" href="/" style={{ display: "block", textAlign: "center", marginTop: 16, color: "var(--text-muted)", textDecoration: "none" }}>← Back to homepage</a>}
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   // ── Navigation ──
   const [activeTab, setActiveTab] = useState("home");

@@ -820,6 +820,16 @@ input, select { font-family: inherit; }
 
 .order-payment-method { font-size: 0.8rem; color: var(--text-muted); }
 
+.reset-password-page {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, var(--surface2), var(--surface));
+  padding: 20px;
+}
+.reset-password-box {
+  background: var(--surface); border-radius: 20px; padding: 40px 36px;
+  width: 420px; max-width: 100%; box-shadow: var(--shadow-lg);
+}
+
 /* ─── Product Modal ──────────────────────────────────────────────────────────── */
 .modal-overlay {
   position: fixed;
