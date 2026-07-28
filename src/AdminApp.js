@@ -503,9 +503,18 @@ function ProductsManager({ token }) {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Delete this product? This cannot be undone.")) return;
+    if (!window.confirm("Archive this product? It will be hidden from your storefront, but stays visible in past orders. You can bring it back anytime.")) return;
     try {
       await apiFetch(`/products/${id}`, { method: "DELETE", token });
+      load();
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+
+  const handleReactivate = async (id) => {
+    try {
+      await apiFetch(`/products/${id}`, { method: "PUT", token, body: { active: true } });
       load();
     } catch (e) {
       alert(e.message);
@@ -559,19 +568,24 @@ function ProductsManager({ token }) {
         <div className="admin-panel" style={{ padding: 0 }}>
           <table className="admin-table">
             <thead>
-              <tr><th></th><th>Name</th><th>Category</th><th>Price</th><th>Stock</th><th>Actions</th></tr>
+              <tr><th></th><th>Name</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th>Actions</th></tr>
             </thead>
             <tbody>
               {filtered.map((p) => (
-                <tr key={p.id}>
+                <tr key={p.id} style={{ opacity: p.active === false ? 0.55 : 1 }}>
                   <td><img className="admin-thumb" src={p.image} alt="" onError={(e) => { e.target.style.visibility = "hidden"; }} /></td>
                   <td>{p.name}</td>
                   <td>{p.category?.name || "—"}</td>
                   <td>₹{p.price.toLocaleString()}</td>
                   <td>{p.stock <= 10 ? <span className="admin-badge low-stock">{p.stock}</span> : p.stock}</td>
+                  <td><span className={`admin-badge ${p.active === false ? "active-no" : "active-yes"}`}>{p.active === false ? "Archived" : "Live"}</span></td>
                   <td>
                     <button className="admin-btn admin-btn-outline admin-btn-sm" style={{ marginRight: 6 }} onClick={() => setEditing(p)}>Edit</button>
-                    <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => handleDelete(p.id)}>Delete</button>
+                    {p.active === false ? (
+                      <button className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleReactivate(p.id)}>Reactivate</button>
+                    ) : (
+                      <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => handleDelete(p.id)}>Archive</button>
+                    )}
                   </td>
                 </tr>
               ))}

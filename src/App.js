@@ -96,7 +96,7 @@ function useProducts() {
     setError(null);
     try {
       const [prodRes, catRes] = await Promise.all([
-        fetch(`${API_BASE}/products`),
+        fetch(`${API_BASE}/products?activeOnly=true`),
         fetch(`${API_BASE}/categories`),
       ]);
 
