@@ -140,6 +140,21 @@
 /* ── Modal / form ── */
 .admin-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; z-index: 1000; padding: 20px; }
 .admin-modal-box { background: #fff; border-radius: var(--radius); padding: 26px; width: 480px; max-width: 100%; max-height: 90vh; overflow-y: auto; }
+.admin-modal-box-wide { width: 640px; }
+
+.admin-variant-manager { border-top: 1px solid var(--border); margin-top: 18px; padding-top: 14px; margin-bottom: 6px; }
+.admin-variant-manager .admin-panel-title { justify-content: space-between; }
+.admin-variant-add-row {
+  display: grid; grid-template-columns: 1fr 1fr 1fr 0.8fr 1fr auto;
+  gap: 8px; align-items: center; margin: 10px 0; padding: 10px; background: var(--surface2); border-radius: 8px;
+}
+.admin-variant-add-row input { padding: 7px 9px; border: 1.5px solid var(--border); border-radius: 6px; font-size: 0.82rem; }
+@media (max-width: 640px) { .admin-variant-add-row { grid-template-columns: 1fr 1fr; } }
+
+.admin-bulk-steps { padding-left: 20px; margin: 14px 0; }
+.admin-bulk-steps li { margin-bottom: 16px; font-size: 0.88rem; }
+.admin-bulk-result { background: var(--surface2); border-radius: 8px; padding: 12px 14px; margin-top: 10px; font-size: 0.85rem; }
+
 .admin-modal-box h3 { margin: 0 0 18px; color: var(--dark2); }
 .admin-form-row { margin-bottom: 14px; }
 .admin-form-row label { display:block; font-size: 0.82rem; font-weight: 600; color: var(--text); margin-bottom: 6px; }

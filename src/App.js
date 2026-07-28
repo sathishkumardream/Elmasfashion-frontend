@@ -131,14 +131,14 @@ function useProducts() {
   return { products, categories, loading, error, refetch: fetchAll };
 }
 
-async function apiAddToCart(productId, qty, token) {
+async function apiAddToCart(productId, qty, token, variantId = null) {
   const res = await fetch(`${API_BASE}/cart`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: JSON.stringify({ productId, quantity: qty }),
+    body: JSON.stringify({ productId, quantity: qty, variantId: variantId || undefined }),
   });
   if (!res.ok) throw new Error(`Cart error: ${res.status}`);
   return res.json();
@@ -322,9 +322,16 @@ function ProductCard({ product, onView, onWishlist, wishlist, onAddToCart }) {
         <button
           className="add-cart-btn"
           disabled={!product.inStock}
-          onClick={e => { e.stopPropagation(); onAddToCart(product, 1); }}
+          onClick={e => {
+            e.stopPropagation();
+            if (Array.isArray(product.variants) && product.variants.length > 0) {
+              onView(product); // needs a size/color pick — open the modal instead of guessing
+            } else {
+              onAddToCart(product, 1);
+            }
+          }}
         >
-          {product.inStock ? "Add to Cart" : "Out of Stock"}
+          {!product.inStock ? "Out of Stock" : (Array.isArray(product.variants) && product.variants.length > 0) ? "Select Options" : "Add to Cart"}
         </button>
       </div>
     </div>
@@ -337,7 +344,7 @@ function ProductCard({ product, onView, onWishlist, wishlist, onAddToCart }) {
 // ─────────────────────────────────────────────────────────────────────────────
 function ProductModal({ product, onClose, onWishlist, wishlist, onAddToCart, onBuyNow }) {
   const [selSize, setSelSize] = useState(null);
-  const [selColor, setSelColor] = useState(0);
+  const [selColor, setSelColor] = useState(null);
   const [qty, setQty] = useState(1);
   const [cartMsg, setCartMsg] = useState(null); // success/error feedback
 
@@ -348,23 +355,62 @@ function ProductModal({ product, onClose, onWishlist, wishlist, onAddToCart, onB
     ? product.category
     : product.category?.name ?? "—";
 
-  const hasDiscount = product.originalPrice > product.price;
-  const discount = hasDiscount
-    ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
-    : 0;
-
   const colors  = Array.isArray(product.colors) ? product.colors : [];
   const sizes   = Array.isArray(product.sizes)  ? product.sizes  : [];
+
+  // ── Real variants (size/color/stock/price combinations set by the admin) ──
+  const realVariants = Array.isArray(product.variants) ? product.variants : [];
+  const hasRealVariants = realVariants.length > 0;
+
+  // Which axes actually vary across this product's real variants
+  const variantSizes  = hasRealVariants ? [...new Set(realVariants.map(v => v.size).filter(Boolean))]  : [];
+  const variantColors = hasRealVariants ? [...new Set(realVariants.map(v => v.color).filter(Boolean))] : [];
+  const needsSize  = variantSizes.length > 0;
+  const needsColor = variantColors.length > 0;
+
+  // The option lists actually rendered — real variant values take priority over the legacy hint fields
+  const sizeOptions  = hasRealVariants ? variantSizes  : sizes;
+  const colorOptions = hasRealVariants ? variantColors : colors;
+
+  const selectedVariant = hasRealVariants
+    ? realVariants.find(v =>
+        (needsSize ? v.size === selSize : true) &&
+        (needsColor ? v.color === selColor : true)
+      )
+    : null;
+
+  const selectionComplete = !hasRealVariants || ((!needsSize || selSize) && (!needsColor || selColor));
+
+  const effectivePrice = selectedVariant?.price ?? product.price;
+  const effectiveStock = hasRealVariants
+    ? (selectionComplete ? (selectedVariant?.stock ?? 0) : null) // null = "not yet known, still picking"
+    : product.stock;
+
+  const hasDiscount = product.originalPrice > effectivePrice;
+  const discount = hasDiscount
+    ? Math.round(((product.originalPrice - effectivePrice) / product.originalPrice) * 100)
+    : 0;
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = ""; };
   }, []);
 
+  // Reset quantity if it now exceeds what's available for the newly selected variant
+  useEffect(() => {
+    if (effectiveStock != null && qty > effectiveStock) setQty(Math.max(1, effectiveStock));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedVariant?.id]);
+
   const handleAddToCart = async () => {
+    if (!selectionComplete) {
+      setCartMsg({ type: "error", text: `Please select a ${!selSize && needsSize ? "size" : "color"}.` });
+      setTimeout(() => setCartMsg(null), 2500);
+      return;
+    }
     setCartMsg(null);
     try {
-      await onAddToCart(product, qty);
+      await onAddToCart(product, qty, selectedVariant);
       setCartMsg({ type: "success", text: "✓ Added to cart!" });
     } catch (err) {
       setCartMsg({ type: "error", text: err.message || "Failed to add to cart" });
@@ -373,9 +419,14 @@ function ProductModal({ product, onClose, onWishlist, wishlist, onAddToCart, onB
   };
 
   const handleBuyNow = async () => {
+    if (!selectionComplete) {
+      setCartMsg({ type: "error", text: `Please select a ${!selSize && needsSize ? "size" : "color"}.` });
+      setTimeout(() => setCartMsg(null), 2500);
+      return;
+    }
     setCartMsg(null);
     try {
-      await onAddToCart(product, qty);
+      await onAddToCart(product, qty, selectedVariant);
       onBuyNow();
     } catch (err) {
       setCartMsg({ type: "error", text: err.message || "Failed to add to cart" });
@@ -431,44 +482,42 @@ function ProductModal({ product, onClose, onWishlist, wishlist, onAddToCart, onB
 
             {/* Pricing */}
             <div className="modal-pricing">
-              <span className="modal-price">₹{product.price.toLocaleString()}</span>
+              <span className="modal-price">₹{effectivePrice.toLocaleString()}</span>
               {hasDiscount && (
                 <>
                   <span className="modal-original">₹{product.originalPrice.toLocaleString()}</span>
                   <span className="modal-saved">
-                    You save ₹{(product.originalPrice - product.price).toLocaleString()} ({discount}%)
+                    You save ₹{(product.originalPrice - effectivePrice).toLocaleString()} ({discount}%)
                   </span>
                 </>
               )}
             </div>
 
-            {/* Colors — UI field (not in schema yet) */}
-            {colors.length > 0 && (
+            {colorOptions.length > 0 && (
               <div className="modal-section">
-                <p className="option-label">Color</p>
+                <p className="option-label">Color{hasRealVariants && !selColor && <span className="size-hint"> — please select</span>}</p>
                 <div className="color-options">
-                  {colors.map((c, i) => (
+                  {colorOptions.map((c, i) => (
                     <span
                       key={i}
-                      className={`color-dot lg ${selColor === i ? "selected" : ""}`}
+                      className={`color-dot lg ${selColor === c ? "selected" : ""}`}
                       style={{ background: c, border: c === "#fff" ? "1px solid #ccc" : "none" }}
-                      onClick={() => setSelColor(i)}
-                      title={`Color ${i + 1}`}
+                      onClick={() => setSelColor(c)}
+                      title={c}
                     />
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Sizes — UI field (not in schema yet) */}
-            {sizes.length > 0 && (
+            {sizeOptions.length > 0 && (
               <div className="modal-section">
                 <p className="option-label">
                   Size&nbsp;
                   <button type="button" className="size-guide" onClick={e => e.preventDefault()}>Size Guide</button>
                 </p>
                 <div className="size-options">
-                  {sizes.map(s => (
+                  {sizeOptions.map(s => (
                     <button
                       key={s}
                       className={`size-btn ${selSize === s ? "selected" : ""}`}
@@ -476,7 +525,7 @@ function ProductModal({ product, onClose, onWishlist, wishlist, onAddToCart, onB
                     >{s}</button>
                   ))}
                 </div>
-                {sizes.length > 0 && !selSize && (
+                {!selSize && (
                   <p className="size-hint">Please select a size</p>
                 )}
               </div>
@@ -488,13 +537,14 @@ function ProductModal({ product, onClose, onWishlist, wishlist, onAddToCart, onB
               <div className="qty-control">
                 <button onClick={() => setQty(q => Math.max(1, q - 1))}>−</button>
                 <span>{qty}</span>
-                <button onClick={() => setQty(q => Math.min(product.stock || 99, q + 1))}>+</button>
+                <button onClick={() => setQty(q => Math.min((effectiveStock ?? product.stock) || 99, q + 1))}>+</button>
               </div>
-              {/* Live stock info from backend */}
               <span className="stock-count">
-                {product.stock > 0
-                  ? `${product.stock} in stock`
-                  : <span style={{ color:"#ef4444" }}>Out of stock</span>}
+                {effectiveStock == null
+                  ? <span style={{ color: "var(--text-muted)" }}>Select options to see stock</span>
+                  : effectiveStock > 0
+                    ? `${effectiveStock} in stock`
+                    : <span style={{ color:"#ef4444" }}>Out of stock</span>}
               </span>
             </div>
 
@@ -508,13 +558,13 @@ function ProductModal({ product, onClose, onWishlist, wishlist, onAddToCart, onB
               <button
                 className="btn-cart"
                 onClick={handleAddToCart}
-                disabled={!product.inStock}
+                disabled={effectiveStock === 0}
               >
                 🛒 Add to Cart
               </button>
               <button
                 className="btn-buy"
-                disabled={!product.inStock}
+                disabled={effectiveStock === 0}
                 onClick={handleBuyNow}
               >
                 ⚡ Buy Now
@@ -1088,6 +1138,7 @@ function MyOrdersPage({ user, onBrowse }) {
 }
 
 function CartPage({ cartItems, onUpdateQty, onRemove, onClearCart, onContinue, onCheckout, onGoToOrders, user }) {
+  const priceOf = (item) => item.variant?.price ?? item.product.price;
   const cartCount = cartItems.reduce((sum, item) => sum + item.qty, 0);
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState(null); // { code, type, value, discount, waiveShipping }
@@ -1104,8 +1155,8 @@ function CartPage({ cartItems, onUpdateQty, onRemove, onClearCart, onContinue, o
   const FREE_SHIP_THRESHOLD = 999;
 
   // ── Totals ──
-  const subtotal     = cartItems.reduce((s, i) => s + i.product.price * i.qty, 0);
-  const totalSavings = cartItems.reduce((s, i) => s + ((i.product.originalPrice || i.product.price) - i.product.price) * i.qty, 0);
+  const subtotal     = cartItems.reduce((s, i) => s + priceOf(i) * i.qty, 0);
+  const totalSavings = cartItems.reduce((s, i) => s + ((i.product.originalPrice || priceOf(i)) - priceOf(i)) * i.qty, 0);
   const shippingFee  = (appliedCoupon?.waiveShipping || subtotal >= FREE_SHIP_THRESHOLD) ? 0 : 60;
   const discount = appliedCoupon?.discount || 0;
   const total = Math.max(subtotal - discount, 0) + shippingFee;
@@ -1267,8 +1318,8 @@ function CartPage({ cartItems, onUpdateQty, onRemove, onClearCart, onContinue, o
 
               <div className="cart-items-list">
                 {cartItems.map(item => {
-                  const hasDiscount = item.product.originalPrice > item.product.price;
-                  const saving = hasDiscount ? (item.product.originalPrice - item.product.price) * item.qty : 0;
+                  const hasDiscount = item.product.originalPrice > priceOf(item);
+                  const saving = hasDiscount ? (item.product.originalPrice - priceOf(item)) * item.qty : 0;
                   return (
                     <div key={item.key} className={`cart-item-card ${item.isCustom ? "cart-item-custom" : ""}`}>
                       <div className="cart-item-img-wrap">
@@ -1291,11 +1342,11 @@ function CartPage({ cartItems, onUpdateQty, onRemove, onClearCart, onContinue, o
                             </p>
                             <h3 className="cart-item-name">{item.product.name}</h3>
                             <div className="cart-item-meta">
-                              {item.size && <span className="meta-tag">Size: {item.size}</span>}
-                              {item.color !== undefined && item.product.colors?.[item.color] && (
+                              {item.variant?.size && <span className="meta-tag">Size: {item.variant.size}</span>}
+                              {item.variant?.color && (
                                 <span className="meta-tag color-meta">
-                                  <span className="meta-color-dot" style={{ background: item.product.colors[item.color] }}/>
-                                  Color {item.color + 1}
+                                  <span className="meta-color-dot" style={{ background: item.variant.color }}/>
+                                  {item.variant.color}
                                 </span>
                               )}
                               {item.isCustom && <span className="meta-tag custom-meta">Custom Stitch • 10–15 days</span>}
@@ -1306,7 +1357,7 @@ function CartPage({ cartItems, onUpdateQty, onRemove, onClearCart, onContinue, o
 
                         <div className="cart-item-bottom">
                           <div className="cart-item-pricing">
-                            <span className="cart-item-price">₹{(item.product.price * item.qty).toLocaleString()}</span>
+                            <span className="cart-item-price">₹{(priceOf(item) * item.qty).toLocaleString()}</span>
                             {hasDiscount && <span className="cart-item-original">₹{(item.product.originalPrice * item.qty).toLocaleString()}</span>}
                             {saving > 0 && <span className="cart-item-saving">Save ₹{saving.toLocaleString()}</span>}
                           </div>
@@ -1315,7 +1366,7 @@ function CartPage({ cartItems, onUpdateQty, onRemove, onClearCart, onContinue, o
                             <button onClick={() => onUpdateQty(item.key, item.qty - 1)}>−</button>
                             <span>{item.qty}</span>
                             <button onClick={() => onUpdateQty(item.key, item.qty + 1)}
-                              disabled={item.qty >= (item.product.stock || 99)}>+</button>
+                              disabled={item.qty >= (item.variant?.stock ?? item.product.stock ?? 99)}>+</button>
                           </div>
                         </div>
                       </div>
@@ -1472,7 +1523,7 @@ function CartPage({ cartItems, onUpdateQty, onRemove, onClearCart, onContinue, o
                     onError={e=>{e.target.onerror=null;e.target.src="https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=60&q=80";}}/>
                   <span className="summary-item-name">{item.product.name}</span>
                   <span className="summary-item-qty">×{item.qty}</span>
-                  <span className="summary-item-price">₹{(item.product.price * item.qty).toLocaleString()}</span>
+                  <span className="summary-item-price">₹{(priceOf(item) * item.qty).toLocaleString()}</span>
                 </div>
               ))}
             </div>
@@ -1687,22 +1738,46 @@ export default function App() {
   const [cartItems, setCartItems] = useState([]);
   const cartCount = cartItems.reduce((s, i) => s + i.qty, 0);
 
-  const addToCart = (product, qty = 1, size = null, color = 0) => {
+  const addToCart = (product, qty = 1, variant = null, cartItemId = null) => {
     setCartItems(prev => {
-      const key = `${product.id}-${size}-${color}`;
+      const key = `${product.id}-${variant?.id ?? "novariant"}`;
       const existing = prev.find(i => i.key === key);
+      const maxStock = variant ? variant.stock : (product.stock || 99);
       if (existing) {
-        return prev.map(i => i.key === key ? { ...i, qty: Math.min(i.qty + qty, product.stock || 99) } : i);
+        return prev.map(i => i.key === key
+          ? { ...i, qty: Math.min(i.qty + qty, maxStock), cartItemId: cartItemId ?? i.cartItemId }
+          : i);
       }
-      return [...prev, { key, product, qty, size, color }];
+      return [...prev, { key, product, qty, variant, cartItemId }];
     });
   };
 
-  const removeFromCart = (key) => setCartItems(prev => prev.filter(i => i.key !== key));
+  const removeFromCart = (key) => {
+    setCartItems(prev => {
+      const item = prev.find(i => i.key === key);
+      if (item?.cartItemId && user?.token) {
+        fetch(`${API_BASE}/cart/${item.cartItemId}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${user.token}` },
+        }).catch(err => console.error("Failed to sync cart removal:", err.message));
+      }
+      return prev.filter(i => i.key !== key);
+    });
+  };
 
   const updateQty = (key, qty) => {
     if (qty < 1) { removeFromCart(key); return; }
-    setCartItems(prev => prev.map(i => i.key === key ? { ...i, qty } : i));
+    setCartItems(prev => {
+      const item = prev.find(i => i.key === key);
+      if (item?.cartItemId && user?.token) {
+        fetch(`${API_BASE}/cart/${item.cartItemId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${user.token}` },
+          body: JSON.stringify({ quantity: qty }),
+        }).catch(err => console.error("Failed to sync quantity update:", err.message));
+      }
+      return prev.map(i => i.key === key ? { ...i, qty } : i);
+    });
   };
 
   const clearCart = () => setCartItems([]);
@@ -1725,6 +1800,28 @@ export default function App() {
   // ── API data ──
   const { products, loading, error, refetch } = useProducts();
 
+  // Restore the logged-in user's actual cart from the backend once products are loaded —
+  // without this, refreshing the page shows an empty cart even though the backend still
+  // has the real items (they're just not reflected in local state until now).
+  useEffect(() => {
+    if (!user?.token || products.length === 0 || cartItems.length > 0) return;
+    fetch(`${API_BASE}/cart`, { headers: { Authorization: `Bearer ${user.token}` } })
+      .then(res => res.json())
+      .then(cart => {
+        if (!cart?.items?.length) return;
+        const restored = cart.items
+          .map(ci => {
+            const product = products.find(p => p.id === ci.productId);
+            if (!product) return null;
+            return { key: `${ci.productId}-${ci.variantId ?? "novariant"}`, product, qty: ci.quantity, variant: ci.variant || null, cartItemId: ci.id };
+          })
+          .filter(Boolean);
+        if (restored.length > 0) setCartItems(restored);
+      })
+      .catch(err => console.error("Failed to restore cart:", err.message));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, products]);
+
   const heroSlides = [
     { bg:"linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%)", headline:"New Season Arrivals", sub:"Discover the latest in fashion — curated just for you", cta:"Shop Now" },
     { bg:"linear-gradient(135deg,#2d1b4e 0%,#6b2fa0 50%,#a855f7 100%)", headline:"Women's Exclusive Edit", sub:"Elevate your style with our premium women's collection", cta:"Explore Women's" },
@@ -1737,12 +1834,14 @@ export default function App() {
   const toggleWishlist = id => setWishlist(w => w.includes(id) ? w.filter(x=>x!==id) : [...w,id]);
 
   // ── Add to cart (real API + local state) ──
-  const handleAddToCart = async (product, qty, size = null, color = 0) => {
+  const handleAddToCart = async (product, qty, variant = null) => {
     try {
       if (user?.token) {
-        await apiAddToCart(product.id, qty, user.token);
+        const result = await apiAddToCart(product.id, qty, user.token, variant?.id);
+        addToCart(product, qty, variant, result.id);
+      } else {
+        addToCart(product, qty, variant);
       }
-      addToCart(product, qty, size, color);
     } catch (err) {
       throw err;
     }
@@ -2202,7 +2301,22 @@ export default function App() {
   onAuth={(u) => {
     setUser(u);
     localStorage.setItem("user", JSON.stringify(u));
-    if (u?.token) localStorage.setItem("token", u.token);
+    if (u?.token) {
+      localStorage.setItem("token", u.token);
+      // Sync any items added while browsing as a guest to the real backend cart.
+      // Without this, the backend's cart stays empty even though the screen still
+      // shows items — and checkout fails with "Cart is empty" at the last step.
+      if (cartItems.length > 0) {
+        Promise.all(cartItems.map(item =>
+          apiAddToCart(item.product.id, item.qty, u.token, item.variant?.id).then(result => ({ key: item.key, cartItemId: result.id }))
+        )).then(results => {
+          setCartItems(prev => prev.map(i => {
+            const match = results.find(r => r.key === i.key);
+            return match ? { ...i, cartItemId: match.cartItemId } : i;
+          }));
+        }).catch(err => console.error("Failed to sync guest cart after login:", err.message));
+      }
+    }
   }}
 />
       )}

@@ -247,17 +247,135 @@ function Dashboard({ token }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // PRODUCTS MANAGER
 // ─────────────────────────────────────────────────────────────────────────────
-function ProductForm({ initial, categories, onSave, onCancel, saving, error }) {
+function VariantManager({ productId, token, onStockChanged }) {
+  const [variants, setVariants] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [newVariant, setNewVariant] = useState({ size: "", color: "", price: "", stock: "", sku: "" });
+  const [savingNew, setSavingNew] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    apiFetch(`/products/${productId}`)
+      .then((p) => setVariants(p.variants || []))
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [productId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleAdd = async () => {
+    if (!newVariant.size && !newVariant.color) {
+      setError("Enter at least a size or a color for the variant.");
+      return;
+    }
+    setSavingNew(true); setError("");
+    try {
+      await apiFetch(`/products/${productId}/variants`, {
+        method: "POST",
+        token,
+        body: {
+          ...newVariant,
+          price: newVariant.price || undefined,
+          stock: Number(newVariant.stock) || 0,
+        },
+      });
+      setNewVariant({ size: "", color: "", price: "", stock: "", sku: "" });
+      setAdding(false);
+      load();
+      onStockChanged?.();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSavingNew(false);
+    }
+  };
+
+  const handleUpdateStock = async (variant, stock) => {
+    try {
+      await apiFetch(`/products/variants/${variant.id}`, { method: "PUT", token, body: { stock: Number(stock) } });
+      load();
+      onStockChanged?.();
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Delete this variant?")) return;
+    try {
+      await apiFetch(`/products/variants/${id}`, { method: "DELETE", token });
+      load();
+      onStockChanged?.();
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+
+  return (
+    <div className="admin-variant-manager">
+      <div className="admin-panel-title" style={{ fontSize: "0.92rem", marginTop: 4 }}>
+        Variants (size / color combinations)
+        <button className="admin-btn admin-btn-outline admin-btn-sm" onClick={() => setAdding((a) => !a)}>
+          {adding ? "Cancel" : "+ Add Variant"}
+        </button>
+      </div>
+
+      {error && <div className="admin-form-error">⚠️ {error}</div>}
+
+      {adding && (
+        <div className="admin-variant-add-row">
+          <input placeholder="Size (e.g. M)" value={newVariant.size} onChange={(e) => setNewVariant((v) => ({ ...v, size: e.target.value }))} />
+          <input placeholder="Color (e.g. #2c3e50)" value={newVariant.color} onChange={(e) => setNewVariant((v) => ({ ...v, color: e.target.value }))} />
+          <input type="number" placeholder="Price override" value={newVariant.price} onChange={(e) => setNewVariant((v) => ({ ...v, price: e.target.value }))} />
+          <input type="number" placeholder="Stock" value={newVariant.stock} onChange={(e) => setNewVariant((v) => ({ ...v, stock: e.target.value }))} />
+          <input placeholder="SKU (optional)" value={newVariant.sku} onChange={(e) => setNewVariant((v) => ({ ...v, sku: e.target.value }))} />
+          <button className="admin-btn admin-btn-primary admin-btn-sm" disabled={savingNew} onClick={handleAdd}>
+            {savingNew ? "Adding…" : "Add"}
+          </button>
+        </div>
+      )}
+
+      {loading ? <p className="admin-loading" style={{ padding: 12 }}>Loading variants…</p> : variants.length === 0 ? (
+        <p style={{ color: "var(--text-muted)", fontSize: "0.82rem", padding: "8px 0" }}>
+          No variants yet — this product uses its own single price/stock. Add a variant above if it comes in multiple sizes/colors.
+        </p>
+      ) : (
+        <table className="admin-table" style={{ marginTop: 8 }}>
+          <thead><tr><th>Size</th><th>Color</th><th>Price</th><th>Stock</th><th>SKU</th><th></th></tr></thead>
+          <tbody>
+            {variants.map((v) => (
+              <tr key={v.id}>
+                <td>{v.size || "—"}</td>
+                <td>{v.color ? <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 14, height: 14, borderRadius: "50%", background: v.color, display: "inline-block", border: "1px solid #ddd" }} />{v.color}</span> : "—"}</td>
+                <td>{v.price ? `₹${v.price}` : <span style={{ color: "var(--text-muted)" }}>base price</span>}</td>
+                <td>
+                  <input type="number" defaultValue={v.stock} style={{ width: 64 }}
+                    onBlur={(e) => { if (Number(e.target.value) !== v.stock) handleUpdateStock(v, e.target.value); }} />
+                </td>
+                <td>{v.sku || "—"}</td>
+                <td><button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => handleDelete(v.id)}>Delete</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+function ProductForm({ initial, categories, onSave, onCancel, saving, error, token }) {
   const [form, setForm] = useState(
     initial
-      ? { ...initial, originalPrice: initial.originalPrice ?? "", sizes: initial.sizes ?? "", colors: initial.colors ?? "" }
-      : { name: "", description: "", price: "", originalPrice: "", stock: "", image: "", sizes: "", colors: "", categoryId: categories[0]?.id || "" }
+      ? { ...initial, originalPrice: initial.originalPrice ?? "", sizes: initial.sizes ?? "", colors: initial.colors ?? "", subcategory: initial.subcategory ?? "" }
+      : { name: "", description: "", price: "", originalPrice: "", stock: "", image: "", sizes: "", colors: "", subcategory: "", categoryId: categories[0]?.id || "" }
   );
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
   return (
     <div className="admin-modal-overlay" onClick={onCancel}>
-      <div className="admin-modal-box" onClick={(e) => e.stopPropagation()}>
+      <div className="admin-modal-box admin-modal-box-wide" onClick={(e) => e.stopPropagation()}>
         <h3>{initial ? "Edit Product" : "Add Product"}</h3>
         {error && <div className="admin-form-error">⚠️ {error}</div>}
         <div className="admin-form-row">
@@ -279,7 +397,7 @@ function ProductForm({ initial, categories, onSave, onCancel, saving, error }) {
           </div>
         </div>
         <div className="admin-form-row">
-          <label>Stock</label>
+          <label>Stock {initial?.id ? "(used only if this product has no variants below)" : ""}</label>
           <input type="number" value={form.stock} onChange={(e) => set("stock", e.target.value)} />
         </div>
         <div className="admin-form-row">
@@ -288,20 +406,38 @@ function ProductForm({ initial, categories, onSave, onCancel, saving, error }) {
         </div>
         <div className="admin-two-col">
           <div className="admin-form-row">
-            <label>Sizes (optional)</label>
+            <label>Category</label>
+            <select value={form.categoryId} onChange={(e) => set("categoryId", Number(e.target.value))}>
+              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          <div className="admin-form-row">
+            <label>Sub-category (optional)</label>
+            <input value={form.subcategory} onChange={(e) => set("subcategory", e.target.value)} placeholder="e.g. T-Shirts, Jeans" />
+          </div>
+        </div>
+        <div className="admin-two-col">
+          <div className="admin-form-row">
+            <label>Sizes hint (optional, legacy)</label>
             <input value={form.sizes} onChange={(e) => set("sizes", e.target.value)} placeholder="e.g. S,M,L,XL" />
           </div>
           <div className="admin-form-row">
-            <label>Colors (optional)</label>
+            <label>Colors hint (optional, legacy)</label>
             <input value={form.colors} onChange={(e) => set("colors", e.target.value)} placeholder="e.g. #2c3e50,#c9184a" />
           </div>
         </div>
-        <div className="admin-form-row">
-          <label>Category</label>
-          <select value={form.categoryId} onChange={(e) => set("categoryId", Number(e.target.value))}>
-            {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </div>
+        <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: -8, marginBottom: 12 }}>
+          For products with real per-size/color stock and pricing, use Variants below instead — it's more accurate for inventory and checkout.
+        </p>
+
+        {initial?.id ? (
+          <VariantManager productId={initial.id} token={token} onStockChanged={() => {}} />
+        ) : (
+          <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", background: "var(--surface2)", padding: 10, borderRadius: 8 }}>
+            Save this product first — you'll be able to add size/color variants right after.
+          </p>
+        )}
+
         <div className="admin-form-actions">
           <button className="admin-btn admin-btn-outline" onClick={onCancel}>Cancel</button>
           <button
@@ -333,6 +469,7 @@ function ProductsManager({ token }) {
   const [formError, setFormError] = useState("");
   const [search, setSearch] = useState("");
   const [newCategory, setNewCategory] = useState("");
+  const [bulkOpen, setBulkOpen] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -349,11 +486,15 @@ function ProductsManager({ token }) {
     try {
       if (editing?.id) {
         await apiFetch(`/products/${editing.id}`, { method: "PUT", body: form, token });
+        setEditing(null);
+        load();
       } else {
-        await apiFetch("/products", { method: "POST", body: form, token });
+        // Stay open after creating, switched into "edit" mode for the new product,
+        // so the admin can immediately add size/color variants without re-opening it.
+        const created = await apiFetch("/products", { method: "POST", body: form, token });
+        setEditing(created);
+        load();
       }
-      setEditing(null);
-      load();
     } catch (e) {
       setFormError(e.message);
     } finally {
@@ -406,7 +547,10 @@ function ProductsManager({ token }) {
 
       <div className="admin-toolbar">
         <input className="admin-search-input" placeholder="🔍 Search products…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 260 }} />
-        <button className="admin-btn admin-btn-primary" onClick={() => setEditing({})}>+ Add Product</button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="admin-btn admin-btn-outline" onClick={() => setBulkOpen(true)}>⬆ Bulk Upload</button>
+          <button className="admin-btn admin-btn-primary" onClick={() => setEditing({})}>+ Add Product</button>
+        </div>
       </div>
 
       {loading ? <div className="admin-loading">Loading…</div> :
@@ -442,10 +586,124 @@ function ProductsManager({ token }) {
           categories={categories}
           saving={saving}
           error={formError}
+          token={token}
           onCancel={() => { setEditing(null); setFormError(""); }}
           onSave={handleSave}
         />
       )}
+
+      {bulkOpen && (
+        <BulkUploadModal token={token} onClose={() => setBulkOpen(false)} onDone={() => { setBulkOpen(false); load(); }} />
+      )}
+    </div>
+  );
+}
+
+function BulkUploadModal({ token, onClose, onDone }) {
+  const [fileName, setFileName] = useState("");
+  const [csvText, setCsvText] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
+  const [result, setResult] = useState(null);
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false);
+
+  const handleDownloadTemplate = async () => {
+    setDownloadingTemplate(true);
+    try {
+      const res = await fetch(`${API_BASE}/products/bulk-upload/template`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to download template");
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "product-upload-template.csv";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setDownloadingTemplate(false);
+    }
+  };
+
+  const handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setFileName(file.name);
+    setError(""); setResult(null);
+    const reader = new FileReader();
+    reader.onload = (ev) => setCsvText(ev.target.result);
+    reader.onerror = () => setError("Could not read that file.");
+    reader.readAsText(file);
+  };
+
+  const handleUpload = async () => {
+    if (!csvText) { setError("Choose a CSV file first."); return; }
+    setUploading(true); setError(""); setResult(null);
+    try {
+      const data = await apiFetch("/products/bulk-upload", { method: "POST", token, body: { csvText } });
+      setResult(data);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="admin-modal-overlay" onClick={onClose}>
+      <div className="admin-modal-box" onClick={(e) => e.stopPropagation()}>
+        <h3>Bulk Upload Products</h3>
+
+        <ol className="admin-bulk-steps">
+          <li>
+            Download the template, fill it in (one row per product, or multiple rows for
+            products with several size/color variants).
+            <button className="admin-btn admin-btn-outline admin-btn-sm" style={{ marginTop: 8 }} disabled={downloadingTemplate} onClick={handleDownloadTemplate}>
+              {downloadingTemplate ? "Downloading…" : "⬇ Download Template (.csv)"}
+            </button>
+          </li>
+          <li>
+            Choose your completed CSV file:
+            <input type="file" accept=".csv" onChange={handleFileSelect} style={{ display: "block", marginTop: 8 }} />
+            {fileName && <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: 4 }}>Selected: {fileName}</p>}
+          </li>
+        </ol>
+
+        {error && <div className="admin-form-error">⚠️ {error}</div>}
+
+        {result && (
+          <div className="admin-bulk-result">
+            <p>✅ {result.productsCreated} product(s) created, {result.productsUpdated} updated, {result.variantsCreated} variant(s) added.</p>
+            {result.errors.length > 0 && (
+              <div>
+                <p style={{ color: "#b91c1c", fontWeight: 600, marginTop: 8 }}>{result.errors.length} row group(s) had issues:</p>
+                <ul style={{ fontSize: "0.8rem", color: "#b91c1c" }}>
+                  {result.errors.map((err, i) => (
+                    <li key={i}>{err.product} (row{err.rows.length > 1 ? "s" : ""} {err.rows.join(", ")}): {err.error}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="admin-form-actions">
+          <button className="admin-btn admin-btn-outline" onClick={onClose}>{result ? "Close" : "Cancel"}</button>
+          {!result && (
+            <button className="admin-btn admin-btn-primary" disabled={uploading || !csvText} onClick={handleUpload}>
+              {uploading ? "Uploading…" : "Upload"}
+            </button>
+          )}
+          {result && (
+            <button className="admin-btn admin-btn-primary" onClick={onDone}>Done</button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
