@@ -402,6 +402,19 @@ function ProductModal({ product, onClose, onWishlist, wishlist, onAddToCart, onB
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedVariant?.id]);
 
+  const galleryImages = Array.isArray(product.images) && product.images.length > 0 ? product.images : [product.image];
+  const displayImages = selectedVariant?.image
+    ? [selectedVariant.image, ...galleryImages.filter(img => img !== selectedVariant.image)]
+    : galleryImages;
+
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+
+  // Jump to the variant's own photo the moment a matching variant is selected
+  useEffect(() => {
+    if (selectedVariant?.image) setActiveImageIndex(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedVariant?.id]);
+
   const handleAddToCart = async () => {
     if (!selectionComplete) {
       setCartMsg({ type: "error", text: `Please select a ${!selSize && needsSize ? "size" : "color"}.` });
@@ -440,25 +453,46 @@ function ProductModal({ product, onClose, onWishlist, wishlist, onAddToCart, onB
         <button className="modal-close" onClick={onClose}>✕</button>
 
         <div className="modal-content">
-          {/* Left — Image */}
+          {/* Left — Image carousel */}
           <div className="modal-img-wrap">
-            <img
-              src={product.image}
-              alt={product.name}
-              className="modal-img"
-              onError={e => {
-                e.target.onerror = null;
-                e.target.src = "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400&q=80";
-              }}
-            />
-            {product.badge && (
-              <span className={`card-badge ${product.badge === "Out of Stock" ? "badge-oos" : ""}`}>
-                {product.badge}
-              </span>
-            )}
-            {/* Stock pill */}
-            {product.stock > 0 && product.stock <= 10 && (
-              <span className="modal-stock-pill">🔥 Only {product.stock} left!</span>
+            <div className="modal-img-main">
+              <img
+                src={displayImages[activeImageIndex]}
+                alt={product.name}
+                className="modal-img"
+                onError={e => {
+                  e.target.onerror = null;
+                  e.target.src = "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400&q=80";
+                }}
+              />
+              {displayImages.length > 1 && (
+                <>
+                  <button className="carousel-arrow carousel-arrow-left" onClick={() => setActiveImageIndex(i => (i - 1 + displayImages.length) % displayImages.length)}>‹</button>
+                  <button className="carousel-arrow carousel-arrow-right" onClick={() => setActiveImageIndex(i => (i + 1) % displayImages.length)}>›</button>
+                </>
+              )}
+              {product.badge && (
+                <span className={`card-badge ${product.badge === "Out of Stock" ? "badge-oos" : ""}`}>
+                  {product.badge}
+                </span>
+              )}
+              {/* Stock pill */}
+              {product.stock > 0 && product.stock <= 10 && (
+                <span className="modal-stock-pill">🔥 Only {product.stock} left!</span>
+              )}
+            </div>
+            {displayImages.length > 1 && (
+              <div className="carousel-thumbs">
+                {displayImages.map((img, i) => (
+                  <button
+                    key={i}
+                    className={`carousel-thumb ${i === activeImageIndex ? "active" : ""}`}
+                    onClick={() => setActiveImageIndex(i)}
+                  >
+                    <img src={img} alt="" onError={e => { e.target.style.opacity = 0.3; }} />
+                  </button>
+                ))}
+              </div>
             )}
           </div>
 

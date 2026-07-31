@@ -1,8 +1,29 @@
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import "./App.css";
 import "./AdminApp.css";
 
 const API_BASE = (process.env.REACT_APP_API_URL || "http://localhost:5000/api").replace(/\/+$/, "");
+
+// Direct-to-Cloudinary browser upload — no backend involvement, so no server-side
+// file storage or extra dependency is needed. If these aren't configured, the
+// upload button is simply hidden and admins can still paste an image URL manually.
+const CLOUDINARY_CLOUD_NAME = process.env.REACT_APP_CLOUDINARY_CLOUD_NAME;
+const CLOUDINARY_UPLOAD_PRESET = process.env.REACT_APP_CLOUDINARY_UPLOAD_PRESET;
+const CLOUDINARY_CONFIGURED = Boolean(CLOUDINARY_CLOUD_NAME && CLOUDINARY_UPLOAD_PRESET);
+
+async function uploadImageToCloudinary(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+    method: "POST",
+    body: formData,
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || "Image upload failed");
+  return data.secure_url;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // API HELPER
@@ -26,6 +47,92 @@ async function apiFetch(path, { method = "GET", body, token } = {}) {
 // ─────────────────────────────────────────────────────────────────────────────
 // LOGIN
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// IMAGE UPLOADER — paste a URL (always works) or upload a file via Cloudinary
+// (only shown if REACT_APP_CLOUDINARY_CLOUD_NAME / _UPLOAD_PRESET are configured).
+// multi=true: manages an array of URLs (product gallery) with add/remove/reorder-by-drag omitted for simplicity.
+// multi=false: manages a single URL (variant image).
+// ─────────────────────────────────────────────────────────────────────────────
+function ImageUploader({ multi = false, value, onChange }) {
+  const [urlInput, setUrlInput] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
+
+  const urls = multi ? (Array.isArray(value) ? value : []) : (value ? [value] : []);
+
+  const addUrl = (url) => {
+    if (!url) return;
+    if (multi) onChange([...urls, url]);
+    else onChange(url);
+  };
+
+  const removeAt = (i) => {
+    if (multi) onChange(urls.filter((_, idx) => idx !== i));
+    else onChange("");
+  };
+
+  const handleFileSelect = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    setError(""); setUploading(true);
+    try {
+      for (const file of files) {
+        const url = await uploadImageToCloudinary(file);
+        addUrl(url);
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setUploading(false);
+      e.target.value = ""; // allow re-selecting the same file later
+    }
+  };
+
+  const handleAddUrlClick = () => {
+    if (!urlInput.trim()) return;
+    addUrl(urlInput.trim());
+    setUrlInput("");
+  };
+
+  return (
+    <div className="admin-image-uploader">
+      {urls.length > 0 && (
+        <div className="admin-image-thumbs">
+          {urls.map((u, i) => (
+            <div key={i} className="admin-image-thumb-wrap">
+              <img src={u} alt="" onError={(e) => { e.target.style.opacity = 0.3; }} />
+              <button type="button" className="admin-image-thumb-remove" onClick={() => removeAt(i)}>✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="admin-image-add-row">
+        <input
+          placeholder="Paste an image URL…"
+          value={urlInput}
+          onChange={(e) => setUrlInput(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddUrlClick())}
+        />
+        <button type="button" className="admin-btn admin-btn-outline admin-btn-sm" onClick={handleAddUrlClick}>Add URL</button>
+
+        {CLOUDINARY_CONFIGURED && (
+          <label className="admin-btn admin-btn-outline admin-btn-sm admin-image-upload-btn">
+            {uploading ? "Uploading…" : "⬆ Upload"}
+            <input type="file" accept="image/*" multiple={multi} onChange={handleFileSelect} disabled={uploading} hidden />
+          </label>
+        )}
+      </div>
+      {error && <p className="admin-form-error" style={{ marginTop: 6 }}>⚠️ {error}</p>}
+      {!CLOUDINARY_CONFIGURED && (
+        <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 4 }}>
+          File upload isn't set up yet — paste an image URL for now, or ask about enabling direct upload.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function AdminLogin({ onLogin }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -252,8 +359,9 @@ function VariantManager({ productId, token, onStockChanged }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [adding, setAdding] = useState(false);
-  const [newVariant, setNewVariant] = useState({ size: "", color: "", price: "", stock: "", sku: "" });
+  const [newVariant, setNewVariant] = useState({ size: "", color: "", price: "", stock: "", sku: "", image: "" });
   const [savingNew, setSavingNew] = useState(false);
+  const [editingImageFor, setEditingImageFor] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -281,7 +389,7 @@ function VariantManager({ productId, token, onStockChanged }) {
           stock: Number(newVariant.stock) || 0,
         },
       });
-      setNewVariant({ size: "", color: "", price: "", stock: "", sku: "" });
+      setNewVariant({ size: "", color: "", price: "", stock: "", sku: "", image: "" });
       setAdding(false);
       load();
       onStockChanged?.();
@@ -297,6 +405,16 @@ function VariantManager({ productId, token, onStockChanged }) {
       await apiFetch(`/products/variants/${variant.id}`, { method: "PUT", token, body: { stock: Number(stock) } });
       load();
       onStockChanged?.();
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+
+  const handleUpdateImage = async (variantId, image) => {
+    try {
+      await apiFetch(`/products/variants/${variantId}`, { method: "PUT", token, body: { image } });
+      setEditingImageFor(null);
+      load();
     } catch (e) {
       alert(e.message);
     }
@@ -325,15 +443,21 @@ function VariantManager({ productId, token, onStockChanged }) {
       {error && <div className="admin-form-error">⚠️ {error}</div>}
 
       {adding && (
-        <div className="admin-variant-add-row">
-          <input placeholder="Size (e.g. M)" value={newVariant.size} onChange={(e) => setNewVariant((v) => ({ ...v, size: e.target.value }))} />
-          <input placeholder="Color (e.g. #2c3e50)" value={newVariant.color} onChange={(e) => setNewVariant((v) => ({ ...v, color: e.target.value }))} />
-          <input type="number" placeholder="Price override" value={newVariant.price} onChange={(e) => setNewVariant((v) => ({ ...v, price: e.target.value }))} />
-          <input type="number" placeholder="Stock" value={newVariant.stock} onChange={(e) => setNewVariant((v) => ({ ...v, stock: e.target.value }))} />
-          <input placeholder="SKU (optional)" value={newVariant.sku} onChange={(e) => setNewVariant((v) => ({ ...v, sku: e.target.value }))} />
-          <button className="admin-btn admin-btn-primary admin-btn-sm" disabled={savingNew} onClick={handleAdd}>
-            {savingNew ? "Adding…" : "Add"}
-          </button>
+        <div className="admin-variant-add-block">
+          <div className="admin-variant-add-row">
+            <input placeholder="Size (e.g. M)" value={newVariant.size} onChange={(e) => setNewVariant((v) => ({ ...v, size: e.target.value }))} />
+            <input placeholder="Color (e.g. #2c3e50)" value={newVariant.color} onChange={(e) => setNewVariant((v) => ({ ...v, color: e.target.value }))} />
+            <input type="number" placeholder="Price override" value={newVariant.price} onChange={(e) => setNewVariant((v) => ({ ...v, price: e.target.value }))} />
+            <input type="number" placeholder="Stock" value={newVariant.stock} onChange={(e) => setNewVariant((v) => ({ ...v, stock: e.target.value }))} />
+            <input placeholder="SKU (optional)" value={newVariant.sku} onChange={(e) => setNewVariant((v) => ({ ...v, sku: e.target.value }))} />
+            <button className="admin-btn admin-btn-primary admin-btn-sm" disabled={savingNew} onClick={handleAdd}>
+              {savingNew ? "Adding…" : "Add"}
+            </button>
+          </div>
+          <div style={{ marginTop: 8 }}>
+            <label style={{ fontSize: "0.78rem", fontWeight: 600 }}>Image for this variant (optional)</label>
+            <ImageUploader value={newVariant.image} onChange={(v) => setNewVariant((cur) => ({ ...cur, image: v }))} />
+          </div>
         </div>
       )}
 
@@ -343,20 +467,39 @@ function VariantManager({ productId, token, onStockChanged }) {
         </p>
       ) : (
         <table className="admin-table" style={{ marginTop: 8 }}>
-          <thead><tr><th>Size</th><th>Color</th><th>Price</th><th>Stock</th><th>SKU</th><th></th></tr></thead>
+          <thead><tr><th></th><th>Size</th><th>Color</th><th>Price</th><th>Stock</th><th>SKU</th><th></th></tr></thead>
           <tbody>
             {variants.map((v) => (
-              <tr key={v.id}>
-                <td>{v.size || "—"}</td>
-                <td>{v.color ? <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 14, height: 14, borderRadius: "50%", background: v.color, display: "inline-block", border: "1px solid #ddd" }} />{v.color}</span> : "—"}</td>
-                <td>{v.price ? `₹${v.price}` : <span style={{ color: "var(--text-muted)" }}>base price</span>}</td>
-                <td>
-                  <input type="number" defaultValue={v.stock} style={{ width: 64 }}
-                    onBlur={(e) => { if (Number(e.target.value) !== v.stock) handleUpdateStock(v, e.target.value); }} />
-                </td>
-                <td>{v.sku || "—"}</td>
-                <td><button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => handleDelete(v.id)}>Delete</button></td>
-              </tr>
+              <React.Fragment key={v.id}>
+                <tr>
+                  <td>
+                    {v.image
+                      ? <img src={v.image} alt="" className="admin-thumb" />
+                      : <span style={{ color: "var(--text-muted)", fontSize: "0.72rem" }}>—</span>}
+                  </td>
+                  <td>{v.size || "—"}</td>
+                  <td>{v.color ? <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 14, height: 14, borderRadius: "50%", background: v.color, display: "inline-block", border: "1px solid #ddd" }} />{v.color}</span> : "—"}</td>
+                  <td>{v.price ? `₹${v.price}` : <span style={{ color: "var(--text-muted)" }}>base price</span>}</td>
+                  <td>
+                    <input type="number" defaultValue={v.stock} style={{ width: 64 }}
+                      onBlur={(e) => { if (Number(e.target.value) !== v.stock) handleUpdateStock(v, e.target.value); }} />
+                  </td>
+                  <td>{v.sku || "—"}</td>
+                  <td>
+                    <button className="admin-btn admin-btn-outline admin-btn-sm" style={{ marginRight: 6 }} onClick={() => setEditingImageFor(editingImageFor === v.id ? null : v.id)}>
+                      {v.image ? "Change Image" : "Add Image"}
+                    </button>
+                    <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => handleDelete(v.id)}>Delete</button>
+                  </td>
+                </tr>
+                {editingImageFor === v.id && (
+                  <tr>
+                    <td colSpan={7} style={{ background: "var(--surface2)" }}>
+                      <ImageUploader value={v.image || ""} onChange={(img) => handleUpdateImage(v.id, img)} />
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
             ))}
           </tbody>
         </table>
@@ -365,13 +508,30 @@ function VariantManager({ productId, token, onStockChanged }) {
   );
 }
 
+// Mirrors the customer-facing nav dropdown exactly (App.js SUBCATEGORIES) — keeping this
+// in sync ensures a product's sub-category always matches a real, browsable menu item.
+const SUBCATEGORIES = {
+  men:   [{ key:"tshirt",label:"T-Shirts"},{ key:"shirt",label:"Shirts"},{ key:"jeans",label:"Jeans"},{ key:"trousers",label:"Trousers"},{ key:"shorts",label:"Shorts"},{ key:"trackpants",label:"Track Pants"}],
+  women: [{ key:"tops",label:"Tops"},{ key:"jeans",label:"Jeans"},{ key:"tshirt",label:"T-Shirts"},{ key:"skirts",label:"Skirts"},{ key:"kurtasets",label:"Kurta Sets"},{ key:"kurta",label:"Kurta"},{ key:"kurthi",label:"Kurthi"},{ key:"palazzos",label:"Palazzos"},{ key:"cottonsarees",label:"Cotton Sarees"},{ key:"cottonsilk",label:"Cotton Silk Sarees"},{ key:"designersarees",label:"Designer Sarees"},{ key:"softsilk",label:"Soft Silk Sarees"},{ key:"chiffon",label:"Chiffon Sarees"},{ key:"fancysatin",label:"Fancy Satin Sarees"},{ key:"coppersilk",label:"Copper Soft Silk Sarees"}],
+  boys:  [{ key:"babyboyset",label:"Baby Boy Set"},{ key:"tshirt711",label:"T-Shirts (7–11 yrs)"},{ key:"tshirt1216",label:"T-Shirts (12–16 yrs)"},{ key:"jeans716",label:"Jeans (7–16 yrs)"},{ key:"kidsset510",label:"Kids Dress Set (5–10 yrs)"},{ key:"trouser",label:"Trousers"},{ key:"shorts",label:"Shorts"},{ key:"pants",label:"Pants"}],
+  girls: [{ key:"babygirlset",label:"Baby Girls Set"},{ key:"westerndress",label:"Western Dress"},{ key:"frocks",label:"Frocks"},{ key:"tshirts",label:"T-Shirts"},{ key:"jeans",label:"Jeans"},{ key:"trousers",label:"Trousers"}],
+};
+
 function ProductForm({ initial, categories, onSave, onCancel, saving, error, token }) {
   const [form, setForm] = useState(
     initial
-      ? { ...initial, originalPrice: initial.originalPrice ?? "", sizes: initial.sizes ?? "", colors: initial.colors ?? "", subcategory: initial.subcategory ?? "" }
-      : { name: "", description: "", price: "", originalPrice: "", stock: "", image: "", sizes: "", colors: "", subcategory: "", categoryId: categories[0]?.id || "" }
+      ? { ...initial, originalPrice: initial.originalPrice ?? "", sizes: initial.sizes ?? "", colors: initial.colors ?? "", subcategory: initial.subcategory ?? "", images: initial.images ?? [] }
+      : { name: "", description: "", price: "", originalPrice: "", stock: "", images: [], sizes: "", colors: "", subcategory: "", categoryId: categories[0]?.id || "" }
   );
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const selectedCategory = categories.find((c) => c.id === form.categoryId);
+  const categoryKey = selectedCategory?.name?.toLowerCase().trim();
+  const subcategoryOptions = SUBCATEGORIES[categoryKey] || [];
+
+  const handleCategoryChange = (id) => {
+    setForm((f) => ({ ...f, categoryId: id, subcategory: "" })); // reset — old sub-category may not apply to the new category
+  };
 
   return (
     <div className="admin-modal-overlay" onClick={onCancel}>
@@ -401,19 +561,26 @@ function ProductForm({ initial, categories, onSave, onCancel, saving, error, tok
           <input type="number" value={form.stock} onChange={(e) => set("stock", e.target.value)} />
         </div>
         <div className="admin-form-row">
-          <label>Image URL</label>
-          <input value={form.image} onChange={(e) => set("image", e.target.value)} placeholder="https://..." />
+          <label>Product Images {form.images.length > 0 && <span style={{ fontWeight: 400, color: "var(--text-muted)" }}>(first image is the main thumbnail)</span>}</label>
+          <ImageUploader multi value={form.images} onChange={(v) => set("images", v)} />
         </div>
         <div className="admin-two-col">
           <div className="admin-form-row">
             <label>Category</label>
-            <select value={form.categoryId} onChange={(e) => set("categoryId", Number(e.target.value))}>
+            <select value={form.categoryId} onChange={(e) => handleCategoryChange(Number(e.target.value))}>
               {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
           <div className="admin-form-row">
-            <label>Sub-category (optional)</label>
-            <input value={form.subcategory} onChange={(e) => set("subcategory", e.target.value)} placeholder="e.g. T-Shirts, Jeans" />
+            <label>Sub-category {subcategoryOptions.length === 0 && "(optional)"}</label>
+            {subcategoryOptions.length > 0 ? (
+              <select value={form.subcategory} onChange={(e) => set("subcategory", e.target.value)}>
+                <option value="">— Select —</option>
+                {subcategoryOptions.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+              </select>
+            ) : (
+              <input value={form.subcategory} onChange={(e) => set("subcategory", e.target.value)} placeholder="e.g. Bags, Accessories" />
+            )}
           </div>
         </div>
         <div className="admin-two-col">
@@ -442,13 +609,14 @@ function ProductForm({ initial, categories, onSave, onCancel, saving, error, tok
           <button className="admin-btn admin-btn-outline" onClick={onCancel}>Cancel</button>
           <button
             className="admin-btn admin-btn-primary"
-            disabled={saving}
+            disabled={saving || form.images.length === 0}
             onClick={() => onSave({
               ...form,
               price: Number(form.price),
               originalPrice: form.originalPrice ? Number(form.originalPrice) : null,
               stock: Number(form.stock),
               categoryId: Number(form.categoryId),
+              image: form.images[0] || "",
             })}
           >
             {saving ? "Saving…" : "Save Product"}
