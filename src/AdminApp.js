@@ -1148,11 +1148,252 @@ function PromotionsManager({ token }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // LAYOUT + MAIN
 // ─────────────────────────────────────────────────────────────────────────────
+const CUSTOM_ORDER_STATUSES = ["PENDING", "CONFIRMED", "IN_PROGRESS", "SHIPPED", "DELIVERED"];
+const STANDARD_SIZES_ADMIN = ["S", "M", "L", "XL", "XXL"];
+
+function DesignForm({ initial, onSave, onCancel, saving, error }) {
+  const [form, setForm] = useState(
+    initial
+      ? { ...initial, sizePricing: initial.sizePricing || {} }
+      : { name: "", image: "", comboType: "Mom & Daughter", tag: "", basePrice: "", sizePricing: {}, active: true }
+  );
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const setSizePrice = (size, val) => setForm((f) => ({ ...f, sizePricing: { ...f.sizePricing, [size]: val } }));
+
+  return (
+    <div className="admin-modal-overlay" onClick={onCancel}>
+      <div className="admin-modal-box" onClick={(e) => e.stopPropagation()}>
+        <h3>{initial ? "Edit Design" : "New Design"}</h3>
+        {error && <div className="admin-form-error">⚠️ {error}</div>}
+        <div className="admin-form-row">
+          <label>Name</label>
+          <input value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. Royal Peacock Silk Set" />
+        </div>
+        <div className="admin-form-row">
+          <label>Design Image</label>
+          <ImageUploader value={form.image} onChange={(v) => set("image", v)} />
+        </div>
+        <div className="admin-two-col">
+          <div className="admin-form-row">
+            <label>Combo Type</label>
+            <select value={form.comboType} onChange={(e) => set("comboType", e.target.value)}>
+              {["Mom & Daughter", "Sisters Combo", "Designer Blouse"].map((c) => <option key={c}>{c}</option>)}
+            </select>
+          </div>
+          <div className="admin-form-row">
+            <label>Tag (optional)</label>
+            <input value={form.tag} onChange={(e) => set("tag", e.target.value)} placeholder="e.g. New, Trending" />
+          </div>
+        </div>
+        <div className="admin-form-row">
+          <label>Base Stitching Price (₹)</label>
+          <input type="number" value={form.basePrice} onChange={(e) => set("basePrice", e.target.value)} placeholder="e.g. 899" />
+        </div>
+        <div className="admin-form-row">
+          <label>Per-size price overrides (optional — leave blank to use base price)</label>
+          <div className="admin-size-price-grid">
+            {STANDARD_SIZES_ADMIN.map((s) => (
+              <div key={s} className="admin-size-price-cell">
+                <span>{s}</span>
+                <input type="number" placeholder={form.basePrice || "—"} value={form.sizePricing[s] ?? ""} onChange={(e) => setSizePrice(s, e.target.value)} />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="admin-form-actions">
+          <button className="admin-btn admin-btn-outline" onClick={onCancel}>Cancel</button>
+          <button
+            className="admin-btn admin-btn-primary"
+            disabled={saving || !form.image}
+            onClick={() => {
+              const cleanPricing = {};
+              Object.entries(form.sizePricing).forEach(([k, v]) => { if (v !== "" && v != null) cleanPricing[k] = Number(v); });
+              onSave({ ...form, basePrice: Number(form.basePrice), sizePricing: cleanPricing });
+            }}
+          >
+            {saving ? "Saving…" : "Save Design"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DesignsManager({ token }) {
+  const [designs, setDesigns] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [editing, setEditing] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState("");
+
+  const load = useCallback(() => {
+    setLoading(true);
+    apiFetch("/custom-designs", { token })
+      .then(setDesigns)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [token]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleSave = async (form) => {
+    setSaving(true); setFormError("");
+    try {
+      if (editing?.id) await apiFetch(`/custom-designs/${editing.id}`, { method: "PUT", body: form, token });
+      else await apiFetch("/custom-designs", { method: "POST", body: form, token });
+      setEditing(null);
+      load();
+    } catch (e) {
+      setFormError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleArchive = async (id) => {
+    if (!window.confirm("Archive this design? It will no longer show in the customer gallery.")) return;
+    try {
+      await apiFetch(`/custom-designs/${id}`, { method: "DELETE", token });
+      load();
+    } catch (e) { alert(e.message); }
+  };
+
+  const handleReactivate = async (id) => {
+    try {
+      await apiFetch(`/custom-designs/${id}`, { method: "PUT", token, body: { active: true } });
+      load();
+    } catch (e) { alert(e.message); }
+  };
+
+  return (
+    <div>
+      <div className="admin-toolbar">
+        <p style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>{designs.length} design(s)</p>
+        <button className="admin-btn admin-btn-primary" onClick={() => setEditing({})}>+ New Design</button>
+      </div>
+
+      {loading ? <div className="admin-loading">Loading…</div> :
+       error ? <div className="admin-form-error">⚠️ {error}</div> :
+       designs.length === 0 ? <div className="admin-empty-state">No designs yet — add your first one.</div> : (
+        <div className="admin-panel" style={{ padding: 0 }}>
+          <table className="admin-table">
+            <thead><tr><th></th><th>Name</th><th>Combo</th><th>Base Price</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>
+              {designs.map((d) => (
+                <tr key={d.id} style={{ opacity: d.active === false ? 0.55 : 1 }}>
+                  <td><img className="admin-thumb" src={d.image} alt="" onError={(e) => { e.target.style.visibility = "hidden"; }} /></td>
+                  <td>{d.name}{d.tag && <span className="admin-badge active-yes" style={{ marginLeft: 6 }}>{d.tag}</span>}</td>
+                  <td>{d.comboType}</td>
+                  <td>₹{d.basePrice.toLocaleString()}</td>
+                  <td><span className={`admin-badge ${d.active === false ? "active-no" : "active-yes"}`}>{d.active === false ? "Archived" : "Live"}</span></td>
+                  <td>
+                    <button className="admin-btn admin-btn-outline admin-btn-sm" style={{ marginRight: 6 }} onClick={() => setEditing(d)}>Edit</button>
+                    {d.active === false
+                      ? <button className="admin-btn admin-btn-primary admin-btn-sm" onClick={() => handleReactivate(d.id)}>Reactivate</button>
+                      : <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => handleArchive(d.id)}>Archive</button>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {editing !== null && (
+        <DesignForm initial={editing.id ? editing : null} saving={saving} error={formError}
+          onCancel={() => { setEditing(null); setFormError(""); }} onSave={handleSave} />
+      )}
+    </div>
+  );
+}
+
+function CustomOrdersManager({ token }) {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [updating, setUpdating] = useState(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    apiFetch("/custom-orders/admin/all", { token })
+      .then(setOrders)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [token]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleStatusChange = async (id, status) => {
+    setUpdating(id);
+    try {
+      await apiFetch(`/custom-orders/${id}/status`, { method: "PUT", body: { status }, token });
+      setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
+    } catch (e) { alert(e.message); }
+    finally { setUpdating(null); }
+  };
+
+  return (
+    <div>
+      {loading ? <div className="admin-loading">Loading…</div> :
+       error ? <div className="admin-form-error">⚠️ {error}</div> :
+       orders.length === 0 ? <div className="admin-empty-state">No custom stitch requests yet.</div> : (
+        <div className="admin-panel" style={{ padding: 0 }}>
+          <table className="admin-table">
+            <thead><tr><th>#</th><th>Customer</th><th>Source</th><th>Combo</th><th>Size</th><th>Price</th><th>Status</th><th>Notes</th></tr></thead>
+            <tbody>
+              {orders.map((o) => (
+                <tr key={o.id}>
+                  <td>#{o.id}</td>
+                  <td>{o.user?.name}<br /><span style={{ color: "var(--text-muted)", fontSize: "0.78rem" }}>{o.user?.email}</span></td>
+                  <td>
+                    {o.design ? <span>🎨 {o.design.name}</span>
+                      : o.sourceProduct ? <span>🛍️ {o.sourceProduct.name}</span>
+                      : <span>🧵 Own fabric</span>}
+                  </td>
+                  <td>{o.comboType}</td>
+                  <td>{o.sizeMode === "standard" ? o.standardSize : "Custom measurements"}</td>
+                  <td>₹{o.price.toLocaleString()}</td>
+                  <td>
+                    <select className="admin-select" value={o.status} disabled={updating === o.id}
+                      onChange={(e) => handleStatusChange(o.id, e.target.value)}>
+                      {CUSTOM_ORDER_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </td>
+                  <td style={{ maxWidth: 180, fontSize: "0.8rem", color: "var(--text-muted)" }}>{o.notes || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MadeForYouManager({ token }) {
+  const [subTab, setSubTab] = useState("designs");
+  return (
+    <div>
+      <h1 className="admin-page-title">Made For You</h1>
+      <p className="admin-page-sub">Manage custom stitching designs and requests</p>
+      <div className="admin-toolbar" style={{ marginBottom: 8 }}>
+        <div className="admin-subtabs">
+          <button className={`admin-subtab ${subTab === "designs" ? "active" : ""}`} onClick={() => setSubTab("designs")}>Designs</button>
+          <button className={`admin-subtab ${subTab === "orders" ? "active" : ""}`} onClick={() => setSubTab("orders")}>Custom Orders</button>
+        </div>
+      </div>
+      {subTab === "designs" ? <DesignsManager token={token} /> : <CustomOrdersManager token={token} />}
+    </div>
+  );
+}
+
 const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard", icon: "📊" },
   { key: "products", label: "Products", icon: "🛍️" },
   { key: "orders", label: "Orders", icon: "📦" },
   { key: "promotions", label: "Promotions", icon: "🏷️" },
+  { key: "madeforyou", label: "Made For You", icon: "🧵" },
 ];
 
 export default function AdminApp() {
@@ -1198,6 +1439,7 @@ export default function AdminApp() {
           {tab === "products" && <ProductsManager token={admin.token} />}
           {tab === "orders" && <OrdersManager token={admin.token} />}
           {tab === "promotions" && <PromotionsManager token={admin.token} />}
+          {tab === "madeforyou" && <MadeForYouManager token={admin.token} />}
         </main>
       </div>
     </div>

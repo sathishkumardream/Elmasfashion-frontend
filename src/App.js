@@ -180,15 +180,6 @@ const SORT_OPTIONS = [
   { value:"newest",    label:"Newest First"       },
 ];
 
-const DESIGNS = [
-  { id:"d1", name:"Royal Kanjivaram Set",  combo:"Mom & Daughter", image:"https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=500&q=80", tag:"Popular"   },
-  { id:"d2", name:"Pastel Linen Coord",    combo:"Sisters Combo",  image:"https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=500&q=80", tag:"New"       },
-  { id:"d3", name:"Brocade Blouse Design", combo:"Designer Blouse",image:"https://images.unsplash.com/photo-1585487000160-6ebcfceb0d03?w=500&q=80", tag:"Trending"  },
-  { id:"d4", name:"Silk Bandhani Combo",   combo:"Mom & Daughter", image:"https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?w=500&q=80", tag:"Bestseller"},
-  { id:"d5", name:"Chikankari Elegance",   combo:"Sisters Combo",  image:"https://images.unsplash.com/photo-1583496661160-fb5886a0aaaa?w=500&q=80", tag:"Popular"   },
-  { id:"d6", name:"Zardosi Blouse Art",    combo:"Designer Blouse",image:"https://images.unsplash.com/photo-1591195853828-11db59a44f43?w=500&q=80", tag:"Premium"   },
-];
-
 const STANDARD_SIZES = ["XS (32)","S (34)","M (36)","L (38)","XL (40)","XXL (42)","XXXL (44)"];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -239,7 +230,7 @@ function ErrorBanner({ message, onRetry }) {
 // PRODUCT CARD
 // Safely reads normalised product — no field will be undefined.
 // ─────────────────────────────────────────────────────────────────────────────
-function ProductCard({ product, onView, onWishlist, wishlist, onAddToCart }) {
+function ProductCard({ product, onView, onWishlist, wishlist, onAddToCart, pickMode, onPick }) {
   const isWished = wishlist.includes(product.id);
   const hasDiscount = product.originalPrice > product.price;
   const discount = hasDiscount
@@ -253,7 +244,7 @@ function ProductCard({ product, onView, onWishlist, wishlist, onAddToCart }) {
 
   return (
     <div className={`product-card ${!product.inStock ? "out-of-stock" : ""}`}
-      onClick={() => onView(product)}>
+      onClick={() => pickMode ? onPick(product) : onView(product)}>
       <div className="card-image-wrap">
         <img
           src={product.image}
@@ -324,14 +315,16 @@ function ProductCard({ product, onView, onWishlist, wishlist, onAddToCart }) {
           disabled={!product.inStock}
           onClick={e => {
             e.stopPropagation();
-            if (Array.isArray(product.variants) && product.variants.length > 0) {
+            if (pickMode) {
+              onPick(product);
+            } else if (Array.isArray(product.variants) && product.variants.length > 0) {
               onView(product); // needs a size/color pick — open the modal instead of guessing
             } else {
               onAddToCart(product, 1);
             }
           }}
         >
-          {!product.inStock ? "Out of Stock" : (Array.isArray(product.variants) && product.variants.length > 0) ? "Select Options" : "Add to Cart"}
+          {!product.inStock ? "Out of Stock" : pickMode ? "Select This Saree" : (Array.isArray(product.variants) && product.variants.length > 0) ? "Select Options" : "Add to Cart"}
         </button>
       </div>
     </div>
@@ -667,25 +660,106 @@ function NavDropdown({ category, onSelect }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // MADE JUST FOR YOU
 // ─────────────────────────────────────────────────────────────────────────────
-function MadeJustForYou({ onAddCustom }) {
+function MadeJustForYou({ user, customFabricPick, onClearFabricPick, onBrowseSarees, onRequireLogin }) {
+  const [designs, setDesigns] = useState([]);
+  const [designsLoading, setDesignsLoading] = useState(true);
   const [selectedDesign, setSelectedDesign] = useState(null);
   const [comboType, setComboType] = useState("Mom & Daughter");
-  const [fabricType, setFabricType] = useState("select");
-  const [fabricChoice, setFabricChoice] = useState("");
+  const [fabricType, setFabricType] = useState(null); // "design" | "store-product" | "own"
   const [sizeMode, setSizeMode] = useState("standard");
   const [stdSize, setStdSize] = useState("");
   const [measurements, setMeasurements] = useState({ chest:"", waist:"", hip:"", length:"", shoulder:"" });
   const [notes, setNotes] = useState("");
-  const [cartAdded, setCartAdded] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const [submittedOrder, setSubmittedOrder] = useState(null);
   const panelRef = useRef(null);
   const setM = (k, v) => setMeasurements(m => ({ ...m, [k]: v }));
 
+  useEffect(() => {
+    fetch(`${API_BASE}/custom-designs?activeOnly=true`)
+      .then(res => res.json())
+      .then(setDesigns)
+      .catch(() => setDesigns([]))
+      .finally(() => setDesignsLoading(false));
+  }, []);
+
+  // If the customer just returned from picking a real saree in the store, switch to that mode automatically
+  useEffect(() => {
+    if (customFabricPick) {
+      setFabricType("store-product");
+      setSelectedDesign(null);
+      setTimeout(() => panelRef.current?.scrollIntoView({ behavior:"smooth", block:"start" }), 100);
+    }
+  }, [customFabricPick]);
+
   const handleCustomize = (design) => {
     setSelectedDesign(design);
-    setComboType(design.combo);
-    setCartAdded(false);
+    setFabricType("design");
+    setComboType(design.comboType);
+    onClearFabricPick?.();
     setTimeout(() => panelRef.current?.scrollIntoView({ behavior:"smooth", block:"start" }), 100);
   };
+
+  const handleUseOwnFabric = () => {
+    setFabricType("own");
+    setSelectedDesign(null);
+    onClearFabricPick?.();
+  };
+
+  const STITCHING_ONLY_FEE = 799;
+  const STORE_FABRIC_STITCHING_FEE = 599;
+
+  const previewPrice = (() => {
+    if (fabricType === "design" && selectedDesign) {
+      const sizeCode = stdSize ? stdSize.split(" ")[0] : "";
+      if (sizeMode === "standard" && sizeCode && selectedDesign.sizePricing?.[sizeCode] != null) {
+        return Number(selectedDesign.sizePricing[sizeCode]);
+      }
+      return selectedDesign.basePrice;
+    }
+    if (fabricType === "store-product" && customFabricPick) return customFabricPick.price + STORE_FABRIC_STITCHING_FEE;
+    if (fabricType === "own") return STITCHING_ONLY_FEE;
+    return null;
+  })();
+
+  const handleSubmit = async () => {
+    setSubmitError("");
+    if (!user?.token) { onRequireLogin(); return; }
+    if (!fabricType) { setSubmitError("Please select a design, a saree from our store, or your own fabric."); return; }
+    if (fabricType === "design" && !selectedDesign) { setSubmitError("Please select a design."); return; }
+    if (fabricType === "store-product" && !customFabricPick) { setSubmitError("Please pick a saree from our store."); return; }
+    if (sizeMode === "standard" && !stdSize) { setSubmitError("Please select a standard size."); return; }
+    if (sizeMode === "custom" && Object.values(measurements).some(v => !v)) { setSubmitError("Please fill in all measurements."); return; }
+
+    setSubmitting(true);
+    try {
+      const res = await fetch(`${API_BASE}/custom-orders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${user.token}` },
+        body: JSON.stringify({
+          designId: fabricType === "design" ? selectedDesign.id : undefined,
+          sourceProductId: fabricType === "store-product" ? customFabricPick.id : undefined,
+          comboType,
+          fabricType,
+          sizeMode,
+          standardSize: sizeMode === "standard" ? stdSize.split(" ")[0] : undefined,
+          measurements: sizeMode === "custom" ? measurements : undefined,
+          notes: notes || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || data.error || "Failed to submit request");
+      setSubmittedOrder(data.customOrder);
+      onClearFabricPick?.();
+    } catch (err) {
+      setSubmitError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const readyToSubmit = fabricType && (fabricType !== "design" || selectedDesign) && (fabricType !== "store-product" || customFabricPick);
 
   return (
     <div className="mjfy-page">
@@ -728,41 +802,54 @@ function MadeJustForYou({ onAddCustom }) {
 
       <section className="mjfy-section alt-bg">
         <div className="section-header">
-          <div><h2 className="section-title">Design Gallery</h2><p className="section-sub">Pick a design to customize</p></div>
+          <div><h2 className="section-title">Design Gallery</h2><p className="section-sub">Pick a ready-made design, or use a saree of your choice below instead</p></div>
         </div>
-        <div className="design-grid">
-          {DESIGNS.map(d => (
-            <div key={d.id} className={`design-card ${selectedDesign?.id===d.id?"selected":""}`}>
-              <div className="design-img-wrap">
-                <img src={d.image} alt={d.name} className="design-img" loading="lazy"/>
-                <span className="design-tag">{d.tag}</span>
-                <span className="design-combo-badge">{d.combo}</span>
+        {designsLoading ? (
+          <p style={{ textAlign: "center", color: "var(--text-muted)" }}>Loading designs…</p>
+        ) : designs.length === 0 ? (
+          <p style={{ textAlign: "center", color: "var(--text-muted)" }}>No designs available right now — you can still use your own saree or one from our store below.</p>
+        ) : (
+          <div className="design-grid">
+            {designs.map(d => (
+              <div key={d.id} className={`design-card ${selectedDesign?.id===d.id?"selected":""}`}>
+                <div className="design-img-wrap">
+                  <img src={d.image} alt={d.name} className="design-img" loading="lazy"/>
+                  {d.tag && <span className="design-tag">{d.tag}</span>}
+                  <span className="design-combo-badge">{d.comboType}</span>
+                </div>
+                <div className="design-body">
+                  <h4 className="design-name">{d.name}</h4>
+                  <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", margin: "2px 0 8px" }}>from ₹{d.basePrice.toLocaleString()}</p>
+                  <button className="customize-btn" onClick={() => handleCustomize(d)}>
+                    {selectedDesign?.id===d.id ? "✓ Selected" : "Customize This →"}
+                  </button>
+                </div>
               </div>
-              <div className="design-body">
-                <h4 className="design-name">{d.name}</h4>
-                <button className="customize-btn" onClick={() => handleCustomize(d)}>
-                  {selectedDesign?.id===d.id ? "✓ Selected" : "Customize This →"}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="mjfy-section" ref={panelRef}>
         <div className="section-header">
           <div>
             <h2 className="section-title">Customization Panel</h2>
-            <p className="section-sub">{selectedDesign ? `Customizing: ${selectedDesign.name}` : "Select a design above to begin"}</p>
+            <p className="section-sub">
+              {fabricType === "design" && selectedDesign ? `Customizing: ${selectedDesign.name}`
+                : fabricType === "store-product" && customFabricPick ? `Using: ${customFabricPick.name}`
+                : fabricType === "own" ? "Using your own saree"
+                : "Pick a design above, or choose your fabric source below to begin"}
+            </p>
           </div>
         </div>
-        <div className={`custom-panel ${!selectedDesign?"panel-disabled":""}`}>
-          {!selectedDesign && (
+        <div className={`custom-panel ${!fabricType?"panel-disabled":""}`}>
+          {!fabricType && (
             <div className="panel-overlay-hint">
-              <span>👆</span><p>Select a design from the gallery above to unlock customization</p>
+              <span>👆</span><p>Select a design above, or choose "Use a Saree from Our Store" / "Use My Own Saree" below to unlock customization</p>
             </div>
           )}
-          {selectedDesign && (
+
+          {fabricType === "design" && selectedDesign && (
             <div className="custom-preview-bar">
               <img src={selectedDesign.image} alt="" className="preview-thumb"/>
               <div>
@@ -770,26 +857,34 @@ function MadeJustForYou({ onAddCustom }) {
                 <p className="preview-name">{selectedDesign.name}</p>
                 <span className="preview-combo">{comboType}</span>
               </div>
-              <button className="preview-change" onClick={() => setSelectedDesign(null)}>✕ Change</button>
+              <button className="preview-change" onClick={() => { setSelectedDesign(null); setFabricType(null); }}>✕ Change</button>
             </div>
           )}
+          {fabricType === "store-product" && customFabricPick && (
+            <div className="custom-preview-bar">
+              <img src={customFabricPick.image} alt="" className="preview-thumb"/>
+              <div>
+                <p className="preview-label">Saree Selected From Store</p>
+                <p className="preview-name">{customFabricPick.name}</p>
+                <span className="preview-combo">₹{customFabricPick.price.toLocaleString()} + stitching</span>
+              </div>
+              <button className="preview-change" onClick={() => { onClearFabricPick?.(); setFabricType(null); }}>✕ Change</button>
+            </div>
+          )}
+
           <div className="custom-grid">
             <div className="custom-block">
               <h4 className="custom-block-title">🧶 Choose Fabric</h4>
               <div className="fabric-options">
-                {[{key:"select",label:"Select from Store",desc:"Browse our curated fabric collection"},{key:"own",label:"Use My Own Saree",desc:"We'll stitch from your provided fabric"}].map(f=>(
-                  <div key={f.key} className={`fabric-option ${fabricType===f.key?"selected":""}`} onClick={()=>setFabricType(f.key)}>
-                    <span className={`fabric-radio ${fabricType===f.key?"active":""}`}/>
-                    <div><p className="fabric-label">{f.label}</p><p className="fabric-desc">{f.desc}</p></div>
-                  </div>
-                ))}
+                <div className={`fabric-option ${fabricType==="store-product"?"selected":""}`} onClick={() => onBrowseSarees()}>
+                  <span className={`fabric-radio ${fabricType==="store-product"?"active":""}`}/>
+                  <div><p className="fabric-label">Use a Saree from Our Store</p><p className="fabric-desc">Browse real sarees and pick one to stitch</p></div>
+                </div>
+                <div className={`fabric-option ${fabricType==="own"?"selected":""}`} onClick={handleUseOwnFabric}>
+                  <span className={`fabric-radio ${fabricType==="own"?"active":""}`}/>
+                  <div><p className="fabric-label">Use My Own Saree</p><p className="fabric-desc">We'll stitch from your provided fabric</p></div>
+                </div>
               </div>
-              {fabricType==="select"&&(
-                <select className="fabric-store-select" value={fabricChoice} onChange={e=>setFabricChoice(e.target.value)}>
-                  <option value="">— Choose fabric type —</option>
-                  {["Cotton Silk","Pure Silk (Kanjivaram)","Georgette","Chiffon","Linen","Net","Brocade"].map(f=><option key={f}>{f}</option>)}
-                </select>
-              )}
             </div>
             <div className="custom-block">
               <h4 className="custom-block-title">📏 Select Sizes</h4>
@@ -818,29 +913,35 @@ function MadeJustForYou({ onAddCustom }) {
             <h4 className="custom-block-title">📝 Add Notes <span className="optional-tag">Optional</span></h4>
             <textarea className="notes-textarea" rows={3} placeholder="Special instructions, design preferences, colour requests..." value={notes} onChange={e=>setNotes(e.target.value)}/>
           </div>
+
+          {submitError && <div className="auth-general-error" style={{ margin: "0 20px 16px" }}>⚠️ {submitError}</div>}
+
           <div className="custom-cta-row">
             <div className="custom-cta-info">
+              {previewPrice != null && <p>💰 Estimated Price: <strong>₹{previewPrice.toLocaleString()}</strong></p>}
               <p>🚚 Estimated Delivery: <strong>10–15 working days</strong></p>
               <p>✂️ Crafted by expert tailors — guaranteed satisfaction</p>
             </div>
-            <button className={`custom-cta-btn ${!selectedDesign?"btn-disabled":""} ${cartAdded?"btn-added":""}`}
-              onClick={()=>{ if(!selectedDesign)return; setCartAdded(true); onAddCustom&&onAddCustom(); }}
-              disabled={!selectedDesign}>
-              {cartAdded?"✓ Added to Cart!":"🛒 Add to Cart & Customize"}
+            <button className={`custom-cta-btn ${!readyToSubmit?"btn-disabled":""}`}
+              onClick={handleSubmit}
+              disabled={!readyToSubmit || submitting}>
+              {submitting ? "Submitting…" : "🛒 Submit Custom Order Request"}
             </button>
           </div>
         </div>
       </section>
 
-      {cartAdded && selectedDesign && (
+      {submittedOrder && (
         <section className="mjfy-section">
           <div className="custom-cart-summary">
             <h3 className="cart-summary-title">🛍️ Your Custom Order Summary</h3>
             <div className="cart-summary-grid">
               {[
-                { icon:<img src={selectedDesign.image} alt="" className="cart-thumb"/>, label:"Selected Design", value:selectedDesign.name },
-                { icon:<span className="cart-summary-icon">👗</span>, label:"Combo Type", value:comboType },
-                { icon:<span className="cart-summary-icon">📏</span>, label:"Measurement", value:sizeMode==="standard"?(stdSize||"Standard — not selected"):"Custom measurements provided" },
+                { icon: submittedOrder.design ? <img src={submittedOrder.design.image} alt="" className="cart-thumb"/> : submittedOrder.sourceProduct ? <img src={submittedOrder.sourceProduct.image} alt="" className="cart-thumb"/> : <span className="cart-summary-icon">🧵</span>,
+                  label: "Fabric / Design", value: submittedOrder.design?.name || submittedOrder.sourceProduct?.name || "Your own saree" },
+                { icon:<span className="cart-summary-icon">👗</span>, label:"Combo Type", value:submittedOrder.comboType },
+                { icon:<span className="cart-summary-icon">📏</span>, label:"Measurement", value:submittedOrder.sizeMode==="standard"?(submittedOrder.standardSize||"—"):"Custom measurements provided" },
+                { icon:<span className="cart-summary-icon">💰</span>, label:"Price", value:`₹${submittedOrder.price.toLocaleString()}` },
                 { icon:<span className="cart-summary-icon">🚚</span>, label:"Delivery Estimate", value:"10–15 working days after confirmation" },
               ].map((row,i)=>(
                 <div key={i} className="cart-summary-row">
@@ -849,8 +950,8 @@ function MadeJustForYou({ onAddCustom }) {
                 </div>
               ))}
             </div>
-            {notes&&<div className="cart-notes"><p className="cart-info-label">Your Notes:</p><p className="cart-notes-text">"{notes}"</p></div>}
-            <p className="cart-confirmation">✅ Our team will contact you within 24 hours to confirm details and pricing.</p>
+            {submittedOrder.notes&&<div className="cart-notes"><p className="cart-info-label">Your Notes:</p><p className="cart-notes-text">"{submittedOrder.notes}"</p></div>}
+            <p className="cart-confirmation">✅ Request #{submittedOrder.id} submitted! Our team will contact you within 24 hours to confirm details and pricing. Track it anytime under "My Custom Orders".</p>
           </div>
         </section>
       )}
@@ -1032,7 +1133,7 @@ function UserDropdown({ user, onLogout, onClose, onNavigate }) {
         <div><p className="user-dropdown-name">{user.name}</p><p className="user-dropdown-email">{user.email}</p></div>
       </div>
       <div className="user-dropdown-divider"/>
-      {[{icon:"📦",label:"My Orders",tab:"myorders"},{icon:"🧵",label:"My Custom Orders"},{icon:"♥",label:"Wishlist",tab:"wishlist"},{icon:"📍",label:"Saved Addresses"},{icon:"💳",label:"Payment Methods"},{icon:"⚙️",label:"Account Settings"}].map(item=>(
+      {[{icon:"📦",label:"My Orders",tab:"myorders"},{icon:"🧵",label:"My Custom Orders",tab:"mycustomorders"},{icon:"♥",label:"Wishlist",tab:"wishlist"},{icon:"📍",label:"Saved Addresses"},{icon:"💳",label:"Payment Methods"},{icon:"⚙️",label:"Account Settings"}].map(item=>(
         <button key={item.label} className="user-dropdown-item" onClick={item.tab ? ()=>{ onNavigate(item.tab); onClose(); } : undefined}>
           <span>{item.icon}</span>{item.label}
         </button>
@@ -1161,6 +1262,122 @@ function MyOrdersPage({ user, onBrowse }) {
                   )}
 
                   <p className="order-payment-method">Payment: {order.paymentMethod}</p>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MY CUSTOM ORDERS (Made For You request history)
+// ─────────────────────────────────────────────────────────────────────────────
+const CUSTOM_ORDER_STEPS = ["PENDING", "CONFIRMED", "IN_PROGRESS", "SHIPPED", "DELIVERED"];
+
+function MyCustomOrdersPage({ user, onBrowse }) {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
+
+  const load = useCallback(() => {
+    if (!user?.token) { setLoading(false); return; }
+    setLoading(true);
+    setError(null);
+    fetch(`${API_BASE}/custom-orders`, { headers: { Authorization: `Bearer ${user.token}` } })
+      .then(async res => {
+        const data = await res.json().catch(() => ([]));
+        if (!res.ok) throw new Error(data.error || data.message || "Failed to load custom orders");
+        return data;
+      })
+      .then(setOrders)
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [user?.token]);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (!user) {
+    return (
+      <div className="no-results">
+        <p>🔒</p><h3>Please sign in</h3>
+        <p>Sign in to view your custom stitch requests.</p>
+      </div>
+    );
+  }
+
+  if (loading) return <LoadingGrid/>;
+  if (error) return <ErrorBanner message={error} onRetry={load}/>;
+
+  if (orders.length === 0) {
+    return (
+      <div className="no-results">
+        <p>🧵</p><h3>No custom orders yet</h3>
+        <p>Create a "Made For You" request and it'll show up here.</p>
+        <button className="cta-primary" onClick={onBrowse}>Explore Made For You</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="my-orders-page">
+      <div className="wishlist-header">
+        <h2>My Custom Orders</h2>
+        <p>{orders.length} request{orders.length !== 1 ? "s" : ""}</p>
+      </div>
+      <div className="orders-list">
+        {orders.map(order => {
+          const isOpen = expandedId === order.id;
+          const stepIndex = CUSTOM_ORDER_STEPS.indexOf(order.status);
+          const image = order.design?.image || order.sourceProduct?.image;
+          const sourceLabel = order.design?.name || order.sourceProduct?.name || "Your own saree";
+          return (
+            <div key={order.id} className="order-card">
+              <button className="order-card-header" onClick={() => setExpandedId(isOpen ? null : order.id)}>
+                <div className="order-card-main">
+                  <span className="order-id">Custom Request #{order.id}</span>
+                  <span className="order-date">{new Date(order.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</span>
+                </div>
+                <div className="order-card-meta">
+                  <span className={`order-status-badge ${order.status}`}>{order.status.replace("_", " ")}</span>
+                  <span className="order-total">₹{order.price.toLocaleString()}</span>
+                  <span className="order-expand-icon">{isOpen ? "▲" : "▼"}</span>
+                </div>
+              </button>
+
+              {isOpen && (
+                <div className="order-card-body">
+                  <div className="order-progress">
+                    {CUSTOM_ORDER_STEPS.map((step, i) => (
+                      <div key={step} className={`order-progress-step ${i <= stepIndex ? "done" : ""}`}>
+                        <span className="order-progress-dot"/>
+                        <span className="order-progress-label">{step.replace("_", " ")}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="order-item-row">
+                    {image
+                      ? <img src={image} alt=""/>
+                      : <span style={{ fontSize: "1.5rem" }}>🧵</span>}
+                    <div className="order-item-info">
+                      <span className="order-item-name">{sourceLabel}</span>
+                      <span className="order-item-qty">{order.comboType} · {order.sizeMode === "standard" ? order.standardSize : "Custom measurements"}</span>
+                    </div>
+                    <span className="order-item-total">₹{order.price.toLocaleString()}</span>
+                  </div>
+
+                  {order.notes && (
+                    <div className="order-shipping-box">
+                      <h4>Your Notes</h4>
+                      <p>"{order.notes}"</p>
+                    </div>
+                  )}
+
+                  <p className="order-payment-method">Estimated delivery: 10–15 working days after confirmation</p>
                 </div>
               )}
             </div>
@@ -1767,6 +1984,21 @@ export default function App() {
   // ── Product state ──
   const [viewProduct, setViewProduct] = useState(null);
   const [wishlist, setWishlist] = useState([]);
+  const [pickingFabricMode, setPickingFabricMode] = useState(false);
+  const [customFabricPick, setCustomFabricPick] = useState(null);
+
+  const handleBrowseSareesForCustom = () => {
+    setPickingFabricMode(true);
+    setFilterCategory("women");
+    setFilterSubcategory(null);
+    setActiveTab("collection");
+  };
+
+  const handlePickFabric = (product) => {
+    setCustomFabricPick(product);
+    setPickingFabricMode(false);
+    setActiveTab("madejustforyou");
+  };
 
   // ── Cart state: [{ product, qty, size, color }] ──
   const [cartItems, setCartItems] = useState([]);
@@ -2164,6 +2396,12 @@ export default function App() {
       {/* ══ COLLECTION ══ */}
       {activeTab==="collection" && (
         <div className="collection-page">
+          {pickingFabricMode && (
+            <div className="fabric-picking-banner">
+              <span>🧵 Selecting a saree for your custom stitch order — click any product below to choose it.</span>
+              <button onClick={() => setPickingFabricMode(false)}>Cancel</button>
+            </div>
+          )}
           <aside className={`filter-sidebar ${sidebarOpen?"open":""}`}>
             <div className="sidebar-header">
               <h3>Filters</h3>
@@ -2262,7 +2500,7 @@ export default function App() {
              ) : (
                <div className="products-grid">
                  {filteredProducts.map(p=>(
-                   <ProductCard key={p.id} product={p} onView={setViewProduct} onWishlist={toggleWishlist} wishlist={wishlist} onAddToCart={handleAddToCart}/>
+                   <ProductCard key={p.id} product={p} onView={setViewProduct} onWishlist={toggleWishlist} wishlist={wishlist} onAddToCart={handleAddToCart} pickMode={pickingFabricMode} onPick={handlePickFabric}/>
                  ))}
                </div>
              )
@@ -2274,6 +2512,11 @@ export default function App() {
       {/* ══ MY ORDERS ══ */}
       {activeTab==="myorders" && (
         <MyOrdersPage user={user} onBrowse={()=>setActiveTab("collection")}/>
+      )}
+
+      {/* ══ MY CUSTOM ORDERS ══ */}
+      {activeTab==="mycustomorders" && (
+        <MyCustomOrdersPage user={user} onBrowse={()=>setActiveTab("madejustforyou")}/>
       )}
 
       {/* ══ WISHLIST ══ */}
@@ -2301,7 +2544,13 @@ export default function App() {
 
       {/* ══ MADE JUST FOR YOU ══ */}
       {activeTab==="madejustforyou" && (
-        <MadeJustForYou onAddCustom={()=>setCartItems(prev=>[...prev,{ key:`custom-${Date.now()}`, product:{ id:`custom-${Date.now()}`, name:"Custom Stitched Outfit", price:0, image:"https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=400&q=80", category:"Custom", inStock:true, stock:1, description:"Custom stitch order" }, qty:1, size:null, color:0, isCustom:true }])}/>
+        <MadeJustForYou
+          user={user}
+          customFabricPick={customFabricPick}
+          onClearFabricPick={() => setCustomFabricPick(null)}
+          onBrowseSarees={handleBrowseSareesForCustom}
+          onRequireLogin={() => setAuthModal("login")}
+        />
       )}
 
       {/* ══ CART ══ */}

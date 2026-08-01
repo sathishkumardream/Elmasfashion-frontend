@@ -166,6 +166,15 @@
 .admin-image-add-row input { flex: 1; min-width: 160px; padding: 8px 10px; border: 1.5px solid var(--border); border-radius: 6px; font-size: 0.82rem; }
 .admin-image-upload-btn { cursor: pointer; display: inline-flex; align-items: center; }
 
+.admin-subtabs { display: flex; gap: 4px; background: var(--surface2); padding: 4px; border-radius: 10px; }
+.admin-subtab { padding: 8px 16px; border: none; background: none; border-radius: 8px; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); cursor: pointer; }
+.admin-subtab.active { background: #fff; color: var(--brand); box-shadow: var(--shadow-sm); }
+
+.admin-size-price-grid { display: flex; gap: 8px; flex-wrap: wrap; }
+.admin-size-price-cell { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.admin-size-price-cell span { font-size: 0.75rem; font-weight: 600; color: var(--text-muted); }
+.admin-size-price-cell input { width: 70px; padding: 7px 8px; border: 1.5px solid var(--border); border-radius: 6px; font-size: 0.8rem; text-align: center; }
+
 .admin-bulk-steps { padding-left: 20px; margin: 14px 0; }
 .admin-bulk-steps li { margin-bottom: 16px; font-size: 0.88rem; }
 .admin-bulk-result { background: var(--surface2); border-radius: 8px; padding: 12px 14px; margin-top: 10px; font-size: 0.85rem; }

@@ -600,9 +600,22 @@ input, select { font-family: inherit; }
 /* ─── Collection Page ────────────────────────────────────────────────────────── */
 .collection-page {
   display: flex;
+  flex-wrap: wrap;
   min-height: calc(100vh - var(--navbar-h) - 40px);
   padding: 0;
 }
+
+.fabric-picking-banner {
+  width: 100%; order: -1;
+  background: var(--brand); color: #fff;
+  padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  font-size: 0.88rem; font-weight: 500;
+}
+.fabric-picking-banner button {
+  background: rgba(255,255,255,0.2); color: #fff; border: none; padding: 6px 14px;
+  border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; flex-shrink: 0;
+}
+.fabric-picking-banner button:hover { background: rgba(255,255,255,0.3); }
 
 /* Filter Sidebar */
 .filter-sidebar {
