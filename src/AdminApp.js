@@ -1153,12 +1153,9 @@ const STANDARD_SIZES_ADMIN = ["S", "M", "L", "XL", "XXL"];
 
 function DesignForm({ initial, onSave, onCancel, saving, error }) {
   const [form, setForm] = useState(
-    initial
-      ? { ...initial, sizePricing: initial.sizePricing || {} }
-      : { name: "", image: "", comboType: "Mom & Daughter", tag: "", basePrice: "", sizePricing: {}, active: true }
+    initial || { name: "", image: "", comboType: "Mom & Daughter", tag: "", basePrice: "", active: true }
   );
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
-  const setSizePrice = (size, val) => setForm((f) => ({ ...f, sizePricing: { ...f.sizePricing, [size]: val } }));
 
   return (
     <div className="admin-modal-overlay" onClick={onCancel}>
@@ -1186,30 +1183,18 @@ function DesignForm({ initial, onSave, onCancel, saving, error }) {
           </div>
         </div>
         <div className="admin-form-row">
-          <label>Base Stitching Price (₹)</label>
+          <label>Fabric / Design Cost (₹)</label>
           <input type="number" value={form.basePrice} onChange={(e) => set("basePrice", e.target.value)} placeholder="e.g. 899" />
-        </div>
-        <div className="admin-form-row">
-          <label>Per-size price overrides (optional — leave blank to use base price)</label>
-          <div className="admin-size-price-grid">
-            {STANDARD_SIZES_ADMIN.map((s) => (
-              <div key={s} className="admin-size-price-cell">
-                <span>{s}</span>
-                <input type="number" placeholder={form.basePrice || "—"} value={form.sizePricing[s] ?? ""} onChange={(e) => setSizePrice(s, e.target.value)} />
-              </div>
-            ))}
-          </div>
+          <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: 4 }}>
+            This is the one-time fabric cost, charged once per combo request. Stitching labor is priced separately, per garment, under Stitching Fees.
+          </p>
         </div>
         <div className="admin-form-actions">
           <button className="admin-btn admin-btn-outline" onClick={onCancel}>Cancel</button>
           <button
             className="admin-btn admin-btn-primary"
             disabled={saving || !form.image}
-            onClick={() => {
-              const cleanPricing = {};
-              Object.entries(form.sizePricing).forEach(([k, v]) => { if (v !== "" && v != null) cleanPricing[k] = Number(v); });
-              onSave({ ...form, basePrice: Number(form.basePrice), sizePricing: cleanPricing });
-            }}
+            onClick={() => onSave({ ...form, basePrice: Number(form.basePrice) })}
           >
             {saving ? "Saving…" : "Save Design"}
           </button>
@@ -1308,11 +1293,76 @@ function DesignsManager({ token }) {
   );
 }
 
+function CustomOrderDetailsModal({ order, onClose }) {
+  return (
+    <div className="admin-modal-overlay" onClick={onClose}>
+      <div className="admin-modal-box" onClick={(e) => e.stopPropagation()}>
+        <h3>Custom Order #{order.id} — Tailoring Details</h3>
+
+        <div className="admin-form-row">
+          <label>Source</label>
+          <p style={{ margin: 0 }}>
+            {order.design ? `🎨 Design: ${order.design.name}` : order.sourceProduct ? `🛍️ Store Saree: ${order.sourceProduct.name}` : "🧵 Customer's own fabric"}
+          </p>
+        </div>
+
+        <div className="admin-two-col">
+          <div className="admin-form-row"><label>Combo Type</label><p style={{ margin: 0 }}>{order.comboType}</p></div>
+          <div className="admin-form-row"><label>Fabric Cost</label><p style={{ margin: 0 }}>₹{order.fabricCost.toLocaleString()}</p></div>
+        </div>
+
+        <div className="admin-two-col">
+          <div className="admin-form-row"><label>Blouse Type</label><p style={{ margin: 0 }}>{order.blouseType || "Not specified"}</p></div>
+          <div className="admin-form-row"><label>Neck Pattern</label><p style={{ margin: 0 }}>{order.neckPattern || "Not specified"}</p></div>
+        </div>
+        <div className="admin-form-row"><label>Back Design</label><p style={{ margin: 0 }}>{order.backDesign || "Not specified"}</p></div>
+
+        {order.referenceImage && (
+          <div className="admin-form-row">
+            <label>Reference Image</label>
+            <img src={order.referenceImage} alt="Reference" style={{ maxWidth: "100%", borderRadius: 8, border: "1px solid var(--border)" }} />
+          </div>
+        )}
+
+        <div className="admin-form-row">
+          <label>Garments in This Combo ({order.recipients.length})</label>
+          <table className="admin-table">
+            <thead><tr><th>For</th><th>Size</th><th>Stitching Cost</th></tr></thead>
+            <tbody>
+              {order.recipients.map((r, i) => (
+                <tr key={i}>
+                  <td>{r.label}</td>
+                  <td>{r.sizeMode === "standard" ? r.standardSize : (
+                    <span title={JSON.stringify(r.measurements)}>Custom: {Object.entries(r.measurements || {}).map(([k, v]) => `${k}=${v}"`).join(", ")}</span>
+                  )}</td>
+                  <td>₹{r.stitchingCost.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {order.notes && (
+          <div className="admin-form-row">
+            <label>Customer Notes</label>
+            <p style={{ margin: 0, background: "var(--surface2)", padding: 10, borderRadius: 8 }}>"{order.notes}"</p>
+          </div>
+        )}
+
+        <div className="admin-form-actions">
+          <button className="admin-btn admin-btn-primary" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CustomOrdersManager({ token }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [updating, setUpdating] = useState(null);
+  const [viewingOrder, setViewingOrder] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -1340,7 +1390,7 @@ function CustomOrdersManager({ token }) {
        orders.length === 0 ? <div className="admin-empty-state">No custom stitch requests yet.</div> : (
         <div className="admin-panel" style={{ padding: 0 }}>
           <table className="admin-table">
-            <thead><tr><th>#</th><th>Customer</th><th>Source</th><th>Combo</th><th>Size</th><th>Price</th><th>Status</th><th>Notes</th></tr></thead>
+            <thead><tr><th>#</th><th>Customer</th><th>Source</th><th>Combo</th><th>Garments</th><th>Price</th><th>Status</th><th></th></tr></thead>
             <tbody>
               {orders.map((o) => (
                 <tr key={o.id}>
@@ -1352,7 +1402,7 @@ function CustomOrdersManager({ token }) {
                       : <span>🧵 Own fabric</span>}
                   </td>
                   <td>{o.comboType}</td>
-                  <td>{o.sizeMode === "standard" ? o.standardSize : "Custom measurements"}</td>
+                  <td>{o.recipients.map(r => r.label).join(", ")}</td>
                   <td>₹{o.price.toLocaleString()}</td>
                   <td>
                     <select className="admin-select" value={o.status} disabled={updating === o.id}
@@ -1360,13 +1410,80 @@ function CustomOrdersManager({ token }) {
                       {CUSTOM_ORDER_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </td>
-                  <td style={{ maxWidth: 180, fontSize: "0.8rem", color: "var(--text-muted)" }}>{o.notes || "—"}</td>
+                  <td><button className="admin-btn admin-btn-outline admin-btn-sm" onClick={() => setViewingOrder(o)}>Details</button></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+      {viewingOrder && <CustomOrderDetailsModal order={viewingOrder} onClose={() => setViewingOrder(null)} />}
+    </div>
+  );
+}
+
+function StitchingFeesManager({ token }) {
+  const [sizePricing, setSizePricing] = useState({});
+  const [ownFabricFee, setOwnFabricFee] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    apiFetch("/stitching-settings")
+      .then((s) => { setSizePricing(s.sizePricing || {}); setOwnFabricFee(s.ownFabricFee ?? 799); })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const setFee = (size, val) => setSizePricing((p) => ({ ...p, [size]: val }));
+
+  const handleSave = async () => {
+    setSaving(true); setError(""); setSaved(false);
+    try {
+      const cleanPricing = {};
+      Object.entries(sizePricing).forEach(([k, v]) => { if (v !== "" && v != null) cleanPricing[k] = Number(v); });
+      await apiFetch("/stitching-settings", { method: "PUT", token, body: { sizePricing: cleanPricing, ownFabricFee: Number(ownFabricFee) } });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <div className="admin-loading">Loading…</div>;
+
+  return (
+    <div className="admin-panel">
+      <h3 className="admin-panel-title">Stitching Labor Cost by Size</h3>
+      <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: 14 }}>
+        This is charged once per garment/recipient in a combo request — on top of the one-time fabric cost.
+        It applies the same way whether the fabric came from a design, a store saree, or the customer's own material.
+      </p>
+      {error && <div className="admin-form-error">⚠️ {error}</div>}
+      <div className="admin-size-price-grid">
+        {STANDARD_SIZES_ADMIN.map((s) => (
+          <div key={s} className="admin-size-price-cell">
+            <span>{s}</span>
+            <input type="number" value={sizePricing[s] ?? ""} onChange={(e) => setFee(s, e.target.value)} placeholder="₹" />
+          </div>
+        ))}
+      </div>
+      <div className="admin-form-row" style={{ marginTop: 16, maxWidth: 280 }}>
+        <label>Custom Measurement Fallback Fee (₹)</label>
+        <input type="number" value={ownFabricFee} onChange={(e) => setOwnFabricFee(e.target.value)} />
+        <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: 4 }}>
+          Used when a recipient provides custom measurements instead of a standard size.
+        </p>
+      </div>
+      <div className="admin-form-actions" style={{ justifyContent: "flex-start", marginTop: 18 }}>
+        <button className="admin-btn admin-btn-primary" disabled={saving} onClick={handleSave}>
+          {saving ? "Saving…" : saved ? "✓ Saved" : "Save Fees"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -1381,9 +1498,12 @@ function MadeForYouManager({ token }) {
         <div className="admin-subtabs">
           <button className={`admin-subtab ${subTab === "designs" ? "active" : ""}`} onClick={() => setSubTab("designs")}>Designs</button>
           <button className={`admin-subtab ${subTab === "orders" ? "active" : ""}`} onClick={() => setSubTab("orders")}>Custom Orders</button>
+          <button className={`admin-subtab ${subTab === "fees" ? "active" : ""}`} onClick={() => setSubTab("fees")}>Stitching Fees</button>
         </div>
       </div>
-      {subTab === "designs" ? <DesignsManager token={token} /> : <CustomOrdersManager token={token} />}
+      {subTab === "designs" && <DesignsManager token={token} />}
+      {subTab === "orders" && <CustomOrdersManager token={token} />}
+      {subTab === "fees" && <StitchingFeesManager token={token} />}
     </div>
   );
 }

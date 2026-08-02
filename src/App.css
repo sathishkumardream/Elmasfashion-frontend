@@ -1962,6 +1962,33 @@ input, select { font-family: inherit; }
 }
 .measurement-input:focus { border-color: var(--brand); background: #fff; }
 
+.tailoring-detail-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.ref-upload-label {
+  display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px;
+  border: 1.5px dashed var(--border); border-radius: 8px; font-size: 0.82rem;
+  color: var(--text-muted); cursor: pointer; transition: all var(--transition);
+}
+.ref-upload-label:hover { border-color: var(--brand); color: var(--brand); }
+
+.add-recipient-btn {
+  padding: 7px 14px; border-radius: 8px; border: 1.5px solid var(--brand); background: none;
+  color: var(--brand); font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: all var(--transition);
+}
+.add-recipient-btn:hover { background: var(--brand); color: #fff; }
+
+.recipient-card { background: var(--surface2); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+.recipient-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.recipient-label-input {
+  flex: 1; padding: 8px 12px; border: 1.5px solid var(--border); border-radius: 8px;
+  font-size: 0.88rem; font-weight: 600; background: #fff;
+}
+.recipient-price { font-size: 0.85rem; font-weight: 700; color: var(--brand); white-space: nowrap; }
+.recipient-remove {
+  width: 26px; height: 26px; border-radius: 50%; border: none; background: #fee2e2; color: #991b1b;
+  font-size: 0.75rem; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.recipient-remove:hover { background: #fecaca; }
+
 .notes-textarea {
   width: 100%;
   padding: 12px 14px;

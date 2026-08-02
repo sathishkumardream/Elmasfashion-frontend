@@ -7,6 +7,26 @@ import "./App.css";
 // ─────────────────────────────────────────────────────────────────────────────
 const API_BASE = (process.env.REACT_APP_API_URL || "http://localhost:5000/api").replace(/\/+$/, "");
 
+// Same direct-to-Cloudinary pattern used in the admin panel — lets customers attach a
+// reference photo to their custom stitch request. Falls back to nothing if not configured;
+// customers simply won't see the upload option (no crash, no broken UI).
+const CLOUDINARY_CLOUD_NAME = process.env.REACT_APP_CLOUDINARY_CLOUD_NAME;
+const CLOUDINARY_UPLOAD_PRESET = process.env.REACT_APP_CLOUDINARY_UPLOAD_PRESET;
+const CLOUDINARY_CONFIGURED = Boolean(CLOUDINARY_CLOUD_NAME && CLOUDINARY_UPLOAD_PRESET);
+
+async function uploadImageToCloudinary(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+    method: "POST",
+    body: formData,
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || "Image upload failed");
+  return data.secure_url;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // DATA NORMALISER
 // Bridges gap between Prisma schema and UI needs.
@@ -666,25 +686,33 @@ function MadeJustForYou({ user, customFabricPick, onClearFabricPick, onBrowseSar
   const [selectedDesign, setSelectedDesign] = useState(null);
   const [comboType, setComboType] = useState("Mom & Daughter");
   const [fabricType, setFabricType] = useState(null); // "design" | "store-product" | "own"
-  const [sizeMode, setSizeMode] = useState("standard");
-  const [stdSize, setStdSize] = useState("");
-  const [measurements, setMeasurements] = useState({ chest:"", waist:"", hip:"", length:"", shoulder:"" });
+
+  const [recipients, setRecipients] = useState([
+    { label: "Person 1", sizeMode: "standard", standardSize: "", measurements: { chest:"", waist:"", hip:"", length:"", shoulder:"" } }
+  ]);
+
+  const [blouseType, setBlouseType] = useState("");
+  const [neckPattern, setNeckPattern] = useState("");
+  const [backDesign, setBackDesign] = useState("");
+  const [referenceImage, setReferenceImage] = useState("");
+  const [refUploading, setRefUploading] = useState(false);
   const [notes, setNotes] = useState("");
+
+  const [stitchingSettings, setStitchingSettings] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [submittedOrder, setSubmittedOrder] = useState(null);
   const panelRef = useRef(null);
-  const setM = (k, v) => setMeasurements(m => ({ ...m, [k]: v }));
 
   useEffect(() => {
     fetch(`${API_BASE}/custom-designs?activeOnly=true`)
-      .then(res => res.json())
-      .then(setDesigns)
-      .catch(() => setDesigns([]))
+      .then(res => res.json()).then(setDesigns).catch(() => setDesigns([]))
       .finally(() => setDesignsLoading(false));
+    fetch(`${API_BASE}/stitching-settings`)
+      .then(res => res.json()).then(setStitchingSettings)
+      .catch(() => setStitchingSettings({ sizePricing: { S:499,M:599,L:699,XL:799,XXL:899 }, ownFabricFee: 799 }));
   }, []);
 
-  // If the customer just returned from picking a real saree in the store, switch to that mode automatically
   useEffect(() => {
     if (customFabricPick) {
       setFabricType("store-product");
@@ -707,21 +735,44 @@ function MadeJustForYou({ user, customFabricPick, onClearFabricPick, onBrowseSar
     onClearFabricPick?.();
   };
 
-  const STITCHING_ONLY_FEE = 799;
-  const STORE_FABRIC_STITCHING_FEE = 599;
+  const addRecipient = () => {
+    setRecipients(r => [...r, { label: `Person ${r.length + 1}`, sizeMode: "standard", standardSize: "", measurements: { chest:"", waist:"", hip:"", length:"", shoulder:"" } }]);
+  };
+  const removeRecipient = (i) => setRecipients(r => r.length > 1 ? r.filter((_, idx) => idx !== i) : r);
+  const updateRecipient = (i, field, value) => setRecipients(r => r.map((rec, idx) => idx === i ? { ...rec, [field]: value } : rec));
+  const updateMeasurement = (i, key, value) => setRecipients(r => r.map((rec, idx) => idx === i ? { ...rec, measurements: { ...rec.measurements, [key]: value } } : rec));
 
-  const previewPrice = (() => {
-    if (fabricType === "design" && selectedDesign) {
-      const sizeCode = stdSize ? stdSize.split(" ")[0] : "";
-      if (sizeMode === "standard" && sizeCode && selectedDesign.sizePricing?.[sizeCode] != null) {
-        return Number(selectedDesign.sizePricing[sizeCode]);
-      }
-      return selectedDesign.basePrice;
+  const stitchingCostFor = (r) => {
+    if (!stitchingSettings) return null;
+    if (r.sizeMode === "standard" && r.standardSize) {
+      const sizeCode = r.standardSize.split(" ")[0];
+      const fee = stitchingSettings.sizePricing?.[sizeCode];
+      if (fee != null) return Number(fee);
     }
-    if (fabricType === "store-product" && customFabricPick) return customFabricPick.price + STORE_FABRIC_STITCHING_FEE;
-    if (fabricType === "own") return STITCHING_ONLY_FEE;
-    return null;
-  })();
+    return stitchingSettings.ownFabricFee;
+  };
+
+  const fabricCost = fabricType === "design" && selectedDesign ? selectedDesign.basePrice
+    : fabricType === "store-product" && customFabricPick ? customFabricPick.price
+    : fabricType === "own" ? 0 : null;
+
+  const totalStitchingCost = stitchingSettings ? recipients.reduce((sum, r) => sum + (stitchingCostFor(r) || 0), 0) : null;
+  const previewPrice = fabricCost != null && totalStitchingCost != null ? fabricCost + totalStitchingCost : null;
+
+  const handleRefUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setRefUploading(true);
+    try {
+      const url = await uploadImageToCloudinary(file);
+      setReferenceImage(url);
+    } catch (err) {
+      setSubmitError(err.message);
+    } finally {
+      setRefUploading(false);
+      e.target.value = "";
+    }
+  };
 
   const handleSubmit = async () => {
     setSubmitError("");
@@ -729,8 +780,11 @@ function MadeJustForYou({ user, customFabricPick, onClearFabricPick, onBrowseSar
     if (!fabricType) { setSubmitError("Please select a design, a saree from our store, or your own fabric."); return; }
     if (fabricType === "design" && !selectedDesign) { setSubmitError("Please select a design."); return; }
     if (fabricType === "store-product" && !customFabricPick) { setSubmitError("Please pick a saree from our store."); return; }
-    if (sizeMode === "standard" && !stdSize) { setSubmitError("Please select a standard size."); return; }
-    if (sizeMode === "custom" && Object.values(measurements).some(v => !v)) { setSubmitError("Please fill in all measurements."); return; }
+    for (const r of recipients) {
+      if (!r.label.trim()) { setSubmitError("Please label every garment (e.g. 'Mom', 'Daughter 1')."); return; }
+      if (r.sizeMode === "standard" && !r.standardSize) { setSubmitError(`Please select a size for "${r.label}".`); return; }
+      if (r.sizeMode === "custom" && Object.values(r.measurements).some(v => !v)) { setSubmitError(`Please fill in all measurements for "${r.label}".`); return; }
+    }
 
     setSubmitting(true);
     try {
@@ -742,9 +796,16 @@ function MadeJustForYou({ user, customFabricPick, onClearFabricPick, onBrowseSar
           sourceProductId: fabricType === "store-product" ? customFabricPick.id : undefined,
           comboType,
           fabricType,
-          sizeMode,
-          standardSize: sizeMode === "standard" ? stdSize.split(" ")[0] : undefined,
-          measurements: sizeMode === "custom" ? measurements : undefined,
+          recipients: recipients.map(r => ({
+            label: r.label.trim(),
+            sizeMode: r.sizeMode,
+            standardSize: r.sizeMode === "standard" ? r.standardSize.split(" ")[0] : undefined,
+            measurements: r.sizeMode === "custom" ? r.measurements : undefined,
+          })),
+          blouseType: blouseType || undefined,
+          neckPattern: neckPattern || undefined,
+          backDesign: backDesign || undefined,
+          referenceImage: referenceImage || undefined,
           notes: notes || undefined,
         }),
       });
@@ -819,7 +880,7 @@ function MadeJustForYou({ user, customFabricPick, onClearFabricPick, onBrowseSar
                 </div>
                 <div className="design-body">
                   <h4 className="design-name">{d.name}</h4>
-                  <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", margin: "2px 0 8px" }}>from ₹{d.basePrice.toLocaleString()}</p>
+                  <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", margin: "2px 0 8px" }}>Fabric: ₹{d.basePrice.toLocaleString()} + stitching per garment</p>
                   <button className="customize-btn" onClick={() => handleCustomize(d)}>
                     {selectedDesign?.id===d.id ? "✓ Selected" : "Customize This →"}
                   </button>
@@ -855,7 +916,7 @@ function MadeJustForYou({ user, customFabricPick, onClearFabricPick, onBrowseSar
               <div>
                 <p className="preview-label">Selected Design</p>
                 <p className="preview-name">{selectedDesign.name}</p>
-                <span className="preview-combo">{comboType}</span>
+                <span className="preview-combo">{comboType} · Fabric ₹{selectedDesign.basePrice.toLocaleString()}</span>
               </div>
               <button className="preview-change" onClick={() => { setSelectedDesign(null); setFabricType(null); }}>✕ Change</button>
             </div>
@@ -866,7 +927,7 @@ function MadeJustForYou({ user, customFabricPick, onClearFabricPick, onBrowseSar
               <div>
                 <p className="preview-label">Saree Selected From Store</p>
                 <p className="preview-name">{customFabricPick.name}</p>
-                <span className="preview-combo">₹{customFabricPick.price.toLocaleString()} + stitching</span>
+                <span className="preview-combo">Fabric ₹{customFabricPick.price.toLocaleString()} + stitching per garment</span>
               </div>
               <button className="preview-change" onClick={() => { onClearFabricPick?.(); setFabricType(null); }}>✕ Change</button>
             </div>
@@ -886,39 +947,91 @@ function MadeJustForYou({ user, customFabricPick, onClearFabricPick, onBrowseSar
                 </div>
               </div>
             </div>
+
             <div className="custom-block">
-              <h4 className="custom-block-title">📏 Select Sizes</h4>
-              <div className="size-mode-tabs">
-                <button className={`size-mode-tab ${sizeMode==="standard"?"active":""}`} onClick={()=>setSizeMode("standard")}>Standard Size</button>
-                <button className={`size-mode-tab ${sizeMode==="custom"?"active":""}`} onClick={()=>setSizeMode("custom")}>Custom Measurement</button>
-              </div>
-              {sizeMode==="standard"?(
-                <select className="fabric-store-select" value={stdSize} onChange={e=>setStdSize(e.target.value)}>
-                  <option value="">— Select standard size —</option>
-                  {STANDARD_SIZES.map(s=><option key={s}>{s}</option>)}
+              <h4 className="custom-block-title">✂️ Tailoring Details <span className="optional-tag">Helps our tailor get it right</span></h4>
+              <div className="tailoring-detail-grid">
+                <select className="fabric-store-select" value={blouseType} onChange={e=>setBlouseType(e.target.value)}>
+                  <option value="">Blouse Type — not specified</option>
+                  {["Sleeveless","Short Sleeve","Full Sleeve","3/4 Sleeve"].map(o=><option key={o}>{o}</option>)}
                 </select>
-              ):(
-                <div className="measurement-form">
-                  {[{key:"chest",label:"Chest (in)"},{key:"waist",label:"Waist (in)"},{key:"hip",label:"Hip (in)"},{key:"length",label:"Length (in)"},{key:"shoulder",label:"Shoulder (in)"}].map(f=>(
-                    <div key={f.key} className="measurement-field">
-                      <label>{f.label}</label>
-                      <input type="number" placeholder="e.g. 36" value={measurements[f.key]} onChange={e=>setM(f.key,e.target.value)} className="measurement-input"/>
-                    </div>
-                  ))}
-                </div>
-              )}
+                <select className="fabric-store-select" value={neckPattern} onChange={e=>setNeckPattern(e.target.value)}>
+                  <option value="">Neck Pattern — not specified</option>
+                  {["Round","Boat","Sweetheart","Collar","Backless"].map(o=><option key={o}>{o}</option>)}
+                </select>
+                <select className="fabric-store-select" value={backDesign} onChange={e=>setBackDesign(e.target.value)}>
+                  <option value="">Back Design — not specified</option>
+                  {["Regular","Deep Back","Keyhole","Tie-Back"].map(o=><option key={o}>{o}</option>)}
+                </select>
+              </div>
+              <div style={{ marginTop: 10 }}>
+                {referenceImage ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <img src={referenceImage} alt="Reference" style={{ width: 60, height: 60, objectFit: "cover", borderRadius: 8 }}/>
+                    <button type="button" className="preview-change" onClick={() => setReferenceImage("")}>✕ Remove reference photo</button>
+                  </div>
+                ) : CLOUDINARY_CONFIGURED ? (
+                  <label className="ref-upload-label">
+                    {refUploading ? "Uploading…" : "📎 Attach a reference photo (optional)"}
+                    <input type="file" accept="image/*" onChange={handleRefUpload} disabled={refUploading} hidden/>
+                  </label>
+                ) : null}
+              </div>
             </div>
           </div>
+
+          <div className="custom-block full-width">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <h4 className="custom-block-title" style={{ margin: 0 }}>📏 Garments in This Combo</h4>
+              <button type="button" className="add-recipient-btn" onClick={addRecipient}>+ Add Another Person</button>
+            </div>
+            <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: -4, marginBottom: 12 }}>
+              One saree can be cut into several garments — add one entry per person (e.g. Mom, Daughter 1, Daughter 2), each with their own size.
+            </p>
+            {recipients.map((r, i) => (
+              <div key={i} className="recipient-card">
+                <div className="recipient-header">
+                  <input className="recipient-label-input" value={r.label} onChange={e=>updateRecipient(i,"label",e.target.value)} placeholder="e.g. Mom, Daughter 1"/>
+                  {stitchingCostFor(r) != null && <span className="recipient-price">₹{stitchingCostFor(r).toLocaleString()}</span>}
+                  {recipients.length > 1 && <button type="button" className="recipient-remove" onClick={() => removeRecipient(i)}>✕</button>}
+                </div>
+                <div className="size-mode-tabs">
+                  <button className={`size-mode-tab ${r.sizeMode==="standard"?"active":""}`} onClick={()=>updateRecipient(i,"sizeMode","standard")}>Standard Size</button>
+                  <button className={`size-mode-tab ${r.sizeMode==="custom"?"active":""}`} onClick={()=>updateRecipient(i,"sizeMode","custom")}>Custom Measurement</button>
+                </div>
+                {r.sizeMode==="standard" ? (
+                  <select className="fabric-store-select" value={r.standardSize} onChange={e=>updateRecipient(i,"standardSize",e.target.value)}>
+                    <option value="">— Select standard size —</option>
+                    {STANDARD_SIZES.map(s=><option key={s}>{s}</option>)}
+                  </select>
+                ) : (
+                  <div className="measurement-form">
+                    {[{key:"chest",label:"Chest (in)"},{key:"waist",label:"Waist (in)"},{key:"hip",label:"Hip (in)"},{key:"length",label:"Length (in)"},{key:"shoulder",label:"Shoulder (in)"}].map(f=>(
+                      <div key={f.key} className="measurement-field">
+                        <label>{f.label}</label>
+                        <input type="number" placeholder="e.g. 36" value={r.measurements[f.key]} onChange={e=>updateMeasurement(i,f.key,e.target.value)} className="measurement-input"/>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
           <div className="custom-block full-width">
             <h4 className="custom-block-title">📝 Add Notes <span className="optional-tag">Optional</span></h4>
-            <textarea className="notes-textarea" rows={3} placeholder="Special instructions, design preferences, colour requests..." value={notes} onChange={e=>setNotes(e.target.value)}/>
+            <textarea className="notes-textarea" rows={3} placeholder="Special instructions, colour requests, embellishments..." value={notes} onChange={e=>setNotes(e.target.value)}/>
           </div>
 
           {submitError && <div className="auth-general-error" style={{ margin: "0 20px 16px" }}>⚠️ {submitError}</div>}
 
           <div className="custom-cta-row">
             <div className="custom-cta-info">
-              {previewPrice != null && <p>💰 Estimated Price: <strong>₹{previewPrice.toLocaleString()}</strong></p>}
+              {previewPrice != null && (
+                <p>💰 Estimated Total: <strong>₹{previewPrice.toLocaleString()}</strong>
+                  {fabricCost > 0 && <span style={{ color: "var(--text-muted)", fontWeight: 400 }}> (₹{fabricCost.toLocaleString()} fabric + ₹{totalStitchingCost.toLocaleString()} stitching)</span>}
+                </p>
+              )}
               <p>🚚 Estimated Delivery: <strong>10–15 working days</strong></p>
               <p>✂️ Crafted by expert tailors — guaranteed satisfaction</p>
             </div>
@@ -940,8 +1053,8 @@ function MadeJustForYou({ user, customFabricPick, onClearFabricPick, onBrowseSar
                 { icon: submittedOrder.design ? <img src={submittedOrder.design.image} alt="" className="cart-thumb"/> : submittedOrder.sourceProduct ? <img src={submittedOrder.sourceProduct.image} alt="" className="cart-thumb"/> : <span className="cart-summary-icon">🧵</span>,
                   label: "Fabric / Design", value: submittedOrder.design?.name || submittedOrder.sourceProduct?.name || "Your own saree" },
                 { icon:<span className="cart-summary-icon">👗</span>, label:"Combo Type", value:submittedOrder.comboType },
-                { icon:<span className="cart-summary-icon">📏</span>, label:"Measurement", value:submittedOrder.sizeMode==="standard"?(submittedOrder.standardSize||"—"):"Custom measurements provided" },
-                { icon:<span className="cart-summary-icon">💰</span>, label:"Price", value:`₹${submittedOrder.price.toLocaleString()}` },
+                { icon:<span className="cart-summary-icon">👥</span>, label:"Garments", value:submittedOrder.recipients.map(r=>`${r.label} (${r.sizeMode==="standard"?r.standardSize:"Custom"})`).join(", ") },
+                { icon:<span className="cart-summary-icon">💰</span>, label:"Price", value:`₹${submittedOrder.price.toLocaleString()} (₹${submittedOrder.fabricCost.toLocaleString()} fabric + ₹${submittedOrder.stitchingCost.toLocaleString()} stitching)` },
                 { icon:<span className="cart-summary-icon">🚚</span>, label:"Delivery Estimate", value:"10–15 working days after confirmation" },
               ].map((row,i)=>(
                 <div key={i} className="cart-summary-row">
@@ -1365,10 +1478,45 @@ function MyCustomOrdersPage({ user, onBrowse }) {
                       : <span style={{ fontSize: "1.5rem" }}>🧵</span>}
                     <div className="order-item-info">
                       <span className="order-item-name">{sourceLabel}</span>
-                      <span className="order-item-qty">{order.comboType} · {order.sizeMode === "standard" ? order.standardSize : "Custom measurements"}</span>
+                      <span className="order-item-qty">{order.comboType} · {order.recipients.length} garment{order.recipients.length !== 1 ? "s" : ""}</span>
                     </div>
                     <span className="order-item-total">₹{order.price.toLocaleString()}</span>
                   </div>
+
+                  <div className="order-items-list">
+                    {order.recipients.map((r, i) => (
+                      <div key={i} className="order-item-row">
+                        <span style={{ fontSize: "1.2rem" }}>👤</span>
+                        <div className="order-item-info">
+                          <span className="order-item-name">{r.label}</span>
+                          <span className="order-item-qty">{r.sizeMode === "standard" ? `Size: ${r.standardSize}` : "Custom measurements"}</span>
+                        </div>
+                        <span className="order-item-total">₹{r.stitchingCost.toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="order-summary-box">
+                    <div className="order-summary-row"><span>Fabric / Design Cost</span><span>₹{order.fabricCost.toLocaleString()}</span></div>
+                    <div className="order-summary-row"><span>Stitching ({order.recipients.length} garment{order.recipients.length !== 1 ? "s" : ""})</span><span>₹{order.stitchingCost.toLocaleString()}</span></div>
+                    <div className="order-summary-row total"><span>Total</span><span>₹{order.price.toLocaleString()}</span></div>
+                  </div>
+
+                  {(order.blouseType || order.neckPattern || order.backDesign) && (
+                    <div className="order-shipping-box">
+                      <h4>Tailoring Details</h4>
+                      {order.blouseType && <p>Blouse: {order.blouseType}</p>}
+                      {order.neckPattern && <p>Neck: {order.neckPattern}</p>}
+                      {order.backDesign && <p>Back: {order.backDesign}</p>}
+                    </div>
+                  )}
+
+                  {order.referenceImage && (
+                    <div className="order-shipping-box">
+                      <h4>Reference Photo</h4>
+                      <img src={order.referenceImage} alt="Reference" style={{ width: 80, height: 80, objectFit: "cover", borderRadius: 8 }}/>
+                    </div>
+                  )}
 
                   {order.notes && (
                     <div className="order-shipping-box">
