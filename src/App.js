@@ -1010,7 +1010,6 @@ function MadeJustForYou({ user, customFabricPick, onClearFabricPick, onBrowseSar
               </div>
             )}
             </div>
-          </div>
 
           <div className="custom-block full-width">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
