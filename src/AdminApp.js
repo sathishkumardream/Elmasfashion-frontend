@@ -1149,7 +1149,7 @@ function PromotionsManager({ token }) {
 // LAYOUT + MAIN
 // ─────────────────────────────────────────────────────────────────────────────
 const CUSTOM_ORDER_STATUSES = ["PENDING", "CONFIRMED", "IN_PROGRESS", "SHIPPED", "DELIVERED"];
-const STANDARD_SIZES_ADMIN = ["S", "M", "L", "XL", "XXL"];
+const STANDARD_SIZES_ADMIN = ["XS", "S", "M", "L", "XL", "XXL", "XXXL"];
 
 function DesignForm({ initial, onSave, onCancel, saving, error }) {
   const [form, setForm] = useState(

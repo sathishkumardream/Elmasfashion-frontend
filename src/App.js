@@ -698,6 +698,11 @@ function MadeJustForYou({ user, customFabricPick, onClearFabricPick, onBrowseSar
   const [refUploading, setRefUploading] = useState(false);
   const [notes, setNotes] = useState("");
 
+  const [step, setStep] = useState("customize"); // "customize" | "address" | "payment"
+  const [address, setAddress] = useState({ name:"", phone:"", line1:"", line2:"", city:"", state:"", pincode:"" });
+  const [payMethod, setPayMethod] = useState("cod");
+  const setA = (k, v) => setAddress(a => ({ ...a, [k]: v }));
+
   const [stitchingSettings, setStitchingSettings] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
@@ -710,7 +715,7 @@ function MadeJustForYou({ user, customFabricPick, onClearFabricPick, onBrowseSar
       .finally(() => setDesignsLoading(false));
     fetch(`${API_BASE}/stitching-settings`)
       .then(res => res.json()).then(setStitchingSettings)
-      .catch(() => setStitchingSettings({ sizePricing: { S:499,M:599,L:699,XL:799,XXL:899 }, ownFabricFee: 799 }));
+      .catch(() => setStitchingSettings({ sizePricing: { XS:449,S:499,M:599,L:699,XL:799,XXL:899,XXXL:999 }, ownFabricFee: 799 }));
   }, []);
 
   useEffect(() => {
@@ -774,7 +779,7 @@ function MadeJustForYou({ user, customFabricPick, onClearFabricPick, onBrowseSar
     }
   };
 
-  const handleSubmit = async () => {
+  const handleProceedToAddress = () => {
     setSubmitError("");
     if (!user?.token) { onRequireLogin(); return; }
     if (!fabricType) { setSubmitError("Please select a design, a saree from our store, or your own fabric."); return; }
@@ -785,7 +790,21 @@ function MadeJustForYou({ user, customFabricPick, onClearFabricPick, onBrowseSar
       if (r.sizeMode === "standard" && !r.standardSize) { setSubmitError(`Please select a size for "${r.label}".`); return; }
       if (r.sizeMode === "custom" && Object.values(r.measurements).some(v => !v)) { setSubmitError(`Please fill in all measurements for "${r.label}".`); return; }
     }
+    setStep("address");
+    setTimeout(() => panelRef.current?.scrollIntoView({ behavior:"smooth", block:"start" }), 50);
+  };
 
+  const handleProceedToPayment = () => {
+    if (!address.name || !address.phone || !address.line1 || !address.city || !address.pincode) {
+      setSubmitError("Please fill in all required address fields.");
+      return;
+    }
+    setSubmitError("");
+    setStep("payment");
+  };
+
+  const handleFinalSubmit = async () => {
+    setSubmitError("");
     setSubmitting(true);
     try {
       const res = await fetch(`${API_BASE}/custom-orders`, {
@@ -807,6 +826,8 @@ function MadeJustForYou({ user, customFabricPick, onClearFabricPick, onBrowseSar
           backDesign: backDesign || undefined,
           referenceImage: referenceImage || undefined,
           notes: notes || undefined,
+          address,
+          paymentMethod: payMethod.toUpperCase(),
         }),
       });
       const data = await res.json();
@@ -841,6 +862,8 @@ function MadeJustForYou({ user, customFabricPick, onClearFabricPick, onBrowseSar
         </div>
       </div>
 
+      {step === "customize" && !submittedOrder && (
+      <>
       <section className="mjfy-section">
         <div className="section-header">
           <div><h2 className="section-title">Choose Your Combo</h2><p className="section-sub">Select the type of custom outfit set</p></div>
@@ -852,7 +875,13 @@ function MadeJustForYou({ user, customFabricPick, onClearFabricPick, onBrowseSar
             { key:"Designer Blouse",icon:"✂️",   desc:"Custom-stitched designer blouse",    color:"linear-gradient(135deg,#1a1a0a,#8B6914)" },
           ].map(c => (
             <div key={c.key} className={`combo-card ${comboType===c.key?"selected":""}`}
-              style={{ background:c.color }} onClick={() => setComboType(c.key)}>
+              style={{ background:c.color }} onClick={() => {
+                setComboType(c.key);
+                if (selectedDesign && selectedDesign.comboType !== c.key) {
+                  setSelectedDesign(null);
+                  setFabricType(null);
+                }
+              }}>
               <span className="combo-icon">{c.icon}</span>
               <h3>{c.key}</h3><p>{c.desc}</p>
               {comboType===c.key && <span className="combo-check">✓</span>}
@@ -863,15 +892,15 @@ function MadeJustForYou({ user, customFabricPick, onClearFabricPick, onBrowseSar
 
       <section className="mjfy-section alt-bg">
         <div className="section-header">
-          <div><h2 className="section-title">Design Gallery</h2><p className="section-sub">Pick a ready-made design, or use a saree of your choice below instead</p></div>
+          <div><h2 className="section-title">Design Gallery</h2><p className="section-sub">Designs for {comboType} — pick one, or use a saree of your choice below instead</p></div>
         </div>
         {designsLoading ? (
           <p style={{ textAlign: "center", color: "var(--text-muted)" }}>Loading designs…</p>
-        ) : designs.length === 0 ? (
-          <p style={{ textAlign: "center", color: "var(--text-muted)" }}>No designs available right now — you can still use your own saree or one from our store below.</p>
+        ) : designs.filter(d => d.comboType === comboType).length === 0 ? (
+          <p style={{ textAlign: "center", color: "var(--text-muted)" }}>No designs for "{comboType}" yet — you can still use your own saree or one from our store below.</p>
         ) : (
           <div className="design-grid">
-            {designs.map(d => (
+            {designs.filter(d => d.comboType === comboType).map(d => (
               <div key={d.id} className={`design-card ${selectedDesign?.id===d.id?"selected":""}`}>
                 <div className="design-img-wrap">
                   <img src={d.image} alt={d.name} className="design-img" loading="lazy"/>
@@ -948,35 +977,38 @@ function MadeJustForYou({ user, customFabricPick, onClearFabricPick, onBrowseSar
               </div>
             </div>
 
-            <div className="custom-block">
-              <h4 className="custom-block-title">✂️ Tailoring Details <span className="optional-tag">Helps our tailor get it right</span></h4>
-              <div className="tailoring-detail-grid">
-                <select className="fabric-store-select" value={blouseType} onChange={e=>setBlouseType(e.target.value)}>
-                  <option value="">Blouse Type — not specified</option>
-                  {["Sleeveless","Short Sleeve","Full Sleeve","3/4 Sleeve"].map(o=><option key={o}>{o}</option>)}
-                </select>
-                <select className="fabric-store-select" value={neckPattern} onChange={e=>setNeckPattern(e.target.value)}>
-                  <option value="">Neck Pattern — not specified</option>
-                  {["Round","Boat","Sweetheart","Collar","Backless"].map(o=><option key={o}>{o}</option>)}
-                </select>
-                <select className="fabric-store-select" value={backDesign} onChange={e=>setBackDesign(e.target.value)}>
-                  <option value="">Back Design — not specified</option>
-                  {["Regular","Deep Back","Keyhole","Tie-Back"].map(o=><option key={o}>{o}</option>)}
-                </select>
+            {comboType === "Designer Blouse" && (
+              <div className="custom-block">
+                <h4 className="custom-block-title">✂️ Tailoring Details <span className="optional-tag">Helps our tailor get it right</span></h4>
+                <div className="tailoring-detail-grid">
+                  <select className="fabric-store-select" value={blouseType} onChange={e=>setBlouseType(e.target.value)}>
+                    <option value="">Blouse Type — not specified</option>
+                    {["Sleeveless","Short Sleeve","Full Sleeve","3/4 Sleeve"].map(o=><option key={o}>{o}</option>)}
+                  </select>
+                  <select className="fabric-store-select" value={neckPattern} onChange={e=>setNeckPattern(e.target.value)}>
+                    <option value="">Neck Pattern — not specified</option>
+                    {["Round","Boat","Sweetheart","Collar","Backless"].map(o=><option key={o}>{o}</option>)}
+                  </select>
+                  <select className="fabric-store-select" value={backDesign} onChange={e=>setBackDesign(e.target.value)}>
+                    <option value="">Back Design — not specified</option>
+                    {["Regular","Deep Back","Keyhole","Tie-Back"].map(o=><option key={o}>{o}</option>)}
+                  </select>
+                </div>
+                <div style={{ marginTop: 10 }}>
+                  {referenceImage ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <img src={referenceImage} alt="Reference" style={{ width: 60, height: 60, objectFit: "cover", borderRadius: 8 }}/>
+                      <button type="button" className="preview-change" onClick={() => setReferenceImage("")}>✕ Remove reference photo</button>
+                    </div>
+                  ) : CLOUDINARY_CONFIGURED ? (
+                    <label className="ref-upload-label">
+                      {refUploading ? "Uploading…" : "📎 Attach a reference photo (optional)"}
+                      <input type="file" accept="image/*" onChange={handleRefUpload} disabled={refUploading} hidden/>
+                    </label>
+                  ) : null}
+                </div>
               </div>
-              <div style={{ marginTop: 10 }}>
-                {referenceImage ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <img src={referenceImage} alt="Reference" style={{ width: 60, height: 60, objectFit: "cover", borderRadius: 8 }}/>
-                    <button type="button" className="preview-change" onClick={() => setReferenceImage("")}>✕ Remove reference photo</button>
-                  </div>
-                ) : CLOUDINARY_CONFIGURED ? (
-                  <label className="ref-upload-label">
-                    {refUploading ? "Uploading…" : "📎 Attach a reference photo (optional)"}
-                    <input type="file" accept="image/*" onChange={handleRefUpload} disabled={refUploading} hidden/>
-                  </label>
-                ) : null}
-              </div>
+            )}
             </div>
           </div>
 
@@ -1036,13 +1068,108 @@ function MadeJustForYou({ user, customFabricPick, onClearFabricPick, onBrowseSar
               <p>✂️ Crafted by expert tailors — guaranteed satisfaction</p>
             </div>
             <button className={`custom-cta-btn ${!readyToSubmit?"btn-disabled":""}`}
-              onClick={handleSubmit}
-              disabled={!readyToSubmit || submitting}>
-              {submitting ? "Submitting…" : "🛒 Submit Custom Order Request"}
+              onClick={handleProceedToAddress}
+              disabled={!readyToSubmit}>
+              Continue to Delivery Address →
             </button>
           </div>
         </div>
       </section>
+      </>
+      )}
+
+      {step === "address" && !submittedOrder && (
+        <section className="mjfy-section">
+          <div className="section-header">
+            <div>
+              <button className="back-step-btn" onClick={() => setStep("customize")}>← Back to Customization</button>
+              <h2 className="section-title">Delivery Address</h2>
+            </div>
+          </div>
+          <div className="address-form" style={{ maxWidth: 640 }}>
+            <div className="addr-row two-col">
+              {[{k:"name",l:"Full Name",p:"Your full name"},{k:"phone",l:"Mobile Number",p:"10-digit number"}].map(f=>(
+                <div key={f.k} className="addr-field">
+                  <label>{f.l}</label>
+                  <input type="text" placeholder={f.p} value={address[f.k]} onChange={e=>setA(f.k,e.target.value)} className="addr-input"/>
+                </div>
+              ))}
+            </div>
+            <div className="addr-field">
+              <label>Address Line 1</label>
+              <input type="text" placeholder="Flat, House no., Building, Street" value={address.line1} onChange={e=>setA("line1",e.target.value)} className="addr-input"/>
+            </div>
+            <div className="addr-field">
+              <label>Address Line 2 <span className="optional-tag">Optional</span></label>
+              <input type="text" placeholder="Area, Colony, Locality" value={address.line2} onChange={e=>setA("line2",e.target.value)} className="addr-input"/>
+            </div>
+            <div className="addr-row three-col">
+              {[{k:"city",l:"City",p:"City"},{k:"state",l:"State",p:"State"},{k:"pincode",l:"Pincode",p:"6-digit pincode"}].map(f=>(
+                <div key={f.k} className="addr-field">
+                  <label>{f.l}</label>
+                  <input type="text" placeholder={f.p} value={address[f.k]} onChange={e=>setA(f.k,e.target.value)} className="addr-input"/>
+                </div>
+              ))}
+            </div>
+            {submitError && <div className="auth-general-error" style={{marginTop:12}}>⚠️ {submitError}</div>}
+            <button className="cart-continue-btn" onClick={handleProceedToPayment}>Proceed to Payment →</button>
+          </div>
+        </section>
+      )}
+
+      {step === "payment" && !submittedOrder && (
+        <section className="mjfy-section">
+          <div className="section-header">
+            <div>
+              <button className="back-step-btn" onClick={() => setStep("address")}>← Back to Address</button>
+              <h2 className="section-title">Payment Method</h2>
+            </div>
+          </div>
+          <div style={{ maxWidth: 640 }}>
+            <div className="payment-methods">
+              {[
+                { key:"cod",  icon:"💵", label:"Cash on Delivery",     desc:"Pay when your order arrives" },
+                { key:"upi",  icon:"📱", label:"UPI / GPay / PhonePe", desc:"Instant payment via UPI" },
+                { key:"card", icon:"💳", label:"Credit / Debit Card",  desc:"Visa, Mastercard, RuPay" },
+              ].map(m => (
+                <label key={m.key} className={`payment-option ${payMethod===m.key?"selected":""}`}>
+                  <input type="radio" name="mjfy-payment" checked={payMethod===m.key} onChange={()=>setPayMethod(m.key)}/>
+                  <span className="pay-icon">{m.icon}</span>
+                  <div className="pay-info">
+                    <p className="pay-label">{m.label}</p>
+                    <p className="pay-desc">{m.desc}</p>
+                  </div>
+                  <span className={`pay-radio ${payMethod===m.key?"active":""}`}/>
+                </label>
+              ))}
+            </div>
+
+            <div className="address-summary-card">
+              <div className="addr-summary-header">
+                <p className="addr-summary-title">📍 Delivering to</p>
+                <button className="auth-link bold" onClick={()=>setStep("address")}>Change</button>
+              </div>
+              <p className="addr-summary-name">{address.name}</p>
+              <p className="addr-summary-line">{address.line1}{address.line2 ? `, ${address.line2}` : ""}</p>
+              <p className="addr-summary-line">{address.city}, {address.state} — {address.pincode}</p>
+              <p className="addr-summary-phone">📞 {address.phone}</p>
+            </div>
+
+            {previewPrice != null && (
+              <p style={{ margin: "14px 0", fontSize: "0.95rem" }}>
+                💰 Total: <strong>₹{previewPrice.toLocaleString()}</strong>
+                <span style={{ color: "var(--text-muted)", fontWeight: 400 }}> (₹{fabricCost.toLocaleString()} fabric + ₹{totalStitchingCost.toLocaleString()} stitching)</span>
+              </p>
+            )}
+
+            {submitError && <div className="auth-general-error" style={{marginBottom:12}}>⚠️ {submitError}</div>}
+
+            <button className={`place-order-btn ${submitting?"placing":""}`} onClick={handleFinalSubmit} disabled={submitting}>
+              {submitting ? <><span className="auth-spinner"/> Submitting…</> : "🛒 Submit Custom Order Request"}
+            </button>
+          </div>
+        </section>
+      )}
 
       {submittedOrder && (
         <section className="mjfy-section">
