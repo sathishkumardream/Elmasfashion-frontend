@@ -884,6 +884,36 @@ input, select { font-family: inherit; }
   transition: all var(--transition);
 }
 .modal-close:hover { background: #f0f0f0; color: var(--text); }
+
+/* ─── Account Settings / Saved Addresses / Payment Methods forms ─────────────── */
+.admin-modal-box {
+  background: var(--surface); border-radius: 20px; padding: 28px;
+  width: 100%; max-width: 460px; max-height: 90vh; overflow-y: auto;
+  box-shadow: var(--shadow-lg); animation: slideUp 0.3s ease;
+}
+.admin-form-row { margin-bottom: 14px; }
+.admin-form-row label { display: block; font-size: 0.82rem; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+.admin-form-row input, .admin-form-row select, .admin-form-row textarea {
+  width: 100%; padding: 10px 12px; border: 1.5px solid var(--border); border-radius: 8px;
+  font-size: 0.9rem; box-sizing: border-box; font-family: inherit; background: #fff;
+}
+.admin-form-row input:focus, .admin-form-row select:focus { outline: none; border-color: var(--brand); }
+.admin-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 560px) { .admin-two-col { grid-template-columns: 1fr; } }
+.admin-form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+.admin-checkbox-row { display: flex; align-items: center; gap: 8px; }
+.admin-checkbox-row input { width: auto; }
+
+.admin-btn { padding: 9px 18px; border-radius: 8px; border: none; cursor: pointer; font-size: 0.85rem; font-weight: 600; transition: all var(--transition); }
+.admin-btn-primary { background: var(--brand); color: #fff; }
+.admin-btn-primary:hover:not(:disabled) { background: var(--brand-dark); }
+.admin-btn-outline { background: #fff; color: var(--text); border: 1.5px solid var(--border); }
+.admin-btn-outline:hover { border-color: var(--brand); color: var(--brand); }
+.admin-btn-danger { background: #fee2e2; color: #991b1b; }
+.admin-btn-danger:hover { background: #fecaca; }
+.admin-btn-sm { padding: 6px 12px; font-size: 0.78rem; }
+.admin-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
 .modal-content { display: grid; grid-template-columns: 1fr 1.1fr; }
 
 .modal-img-wrap {

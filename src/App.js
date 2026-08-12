@@ -1372,7 +1372,7 @@ function UserDropdown({ user, onLogout, onClose, onNavigate }) {
         <div><p className="user-dropdown-name">{user.name}</p><p className="user-dropdown-email">{user.email}</p></div>
       </div>
       <div className="user-dropdown-divider"/>
-      {[{icon:"📦",label:"My Orders",tab:"myorders"},{icon:"🧵",label:"My Custom Orders",tab:"mycustomorders"},{icon:"♥",label:"Wishlist",tab:"wishlist"},{icon:"📍",label:"Saved Addresses"},{icon:"💳",label:"Payment Methods"},{icon:"⚙️",label:"Account Settings"}].map(item=>(
+      {[{icon:"📦",label:"My Orders",tab:"myorders"},{icon:"🧵",label:"My Custom Orders",tab:"mycustomorders"},{icon:"♥",label:"Wishlist",tab:"wishlist"},{icon:"📍",label:"Saved Addresses",tab:"addresses"},{icon:"💳",label:"Payment Methods",tab:"paymentmethods"},{icon:"⚙️",label:"Account Settings",tab:"accountsettings"}].map(item=>(
         <button key={item.label} className="user-dropdown-item" onClick={item.tab ? ()=>{ onNavigate(item.tab); onClose(); } : undefined}>
           <span>{item.icon}</span>{item.label}
         </button>
@@ -1657,6 +1657,333 @@ function MyCustomOrdersPage({ user, onBrowse }) {
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SAVED ADDRESSES
+// ─────────────────────────────────────────────────────────────────────────────
+function AddressForm({ initial, onSave, onCancel, saving, error }) {
+  const [form, setForm] = useState(initial || { label:"Home", name:"", phone:"", line1:"", line2:"", city:"", state:"", pincode:"", isDefault:false });
+  const set = (k,v) => setForm(f => ({ ...f, [k]: v }));
+
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="admin-modal-box" onClick={e=>e.stopPropagation()} style={{ maxWidth: 460 }}>
+        <h3 style={{ marginTop: 0 }}>{initial ? "Edit Address" : "Add New Address"}</h3>
+        {error && <div className="auth-general-error" style={{ marginBottom: 12 }}>⚠️ {error}</div>}
+        <div className="admin-form-row">
+          <label>Label</label>
+          <select value={form.label} onChange={e=>set("label",e.target.value)}>
+            {["Home","Work","Other"].map(l=><option key={l}>{l}</option>)}
+          </select>
+        </div>
+        <div className="admin-two-col">
+          <div className="admin-form-row"><label>Full Name</label><input value={form.name} onChange={e=>set("name",e.target.value)}/></div>
+          <div className="admin-form-row"><label>Phone</label><input value={form.phone} onChange={e=>set("phone",e.target.value)}/></div>
+        </div>
+        <div className="admin-form-row"><label>Address Line 1</label><input value={form.line1} onChange={e=>set("line1",e.target.value)}/></div>
+        <div className="admin-form-row"><label>Address Line 2 (optional)</label><input value={form.line2} onChange={e=>set("line2",e.target.value)}/></div>
+        <div className="admin-two-col">
+          <div className="admin-form-row"><label>City</label><input value={form.city} onChange={e=>set("city",e.target.value)}/></div>
+          <div className="admin-form-row"><label>State</label><input value={form.state} onChange={e=>set("state",e.target.value)}/></div>
+        </div>
+        <div className="admin-form-row"><label>Pincode</label><input value={form.pincode} onChange={e=>set("pincode",e.target.value)}/></div>
+        <div className="admin-form-row admin-checkbox-row">
+          <input type="checkbox" checked={form.isDefault} onChange={e=>set("isDefault",e.target.checked)} id="addr-default"/>
+          <label htmlFor="addr-default" style={{ marginBottom: 0 }}>Set as default address</label>
+        </div>
+        <div className="admin-form-actions">
+          <button className="admin-btn admin-btn-outline" onClick={onCancel}>Cancel</button>
+          <button className="admin-btn admin-btn-primary" disabled={saving} onClick={()=>onSave(form)}>{saving?"Saving…":"Save Address"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SavedAddressesPage({ user }) {
+  const [addresses, setAddresses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [editing, setEditing] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState("");
+
+  const load = useCallback(() => {
+    if (!user?.token) { setLoading(false); return; }
+    setLoading(true);
+    fetch(`${API_BASE}/addresses`, { headers: { Authorization: `Bearer ${user.token}` } })
+      .then(res => res.json()).then(setAddresses).catch(e => setError(e.message)).finally(() => setLoading(false));
+  }, [user?.token]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleSave = async (form) => {
+    setSaving(true); setFormError("");
+    try {
+      const res = await fetch(`${API_BASE}/addresses${editing?.id ? `/${editing.id}` : ""}`, {
+        method: editing?.id ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${user.token}` },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to save address");
+      setEditing(null);
+      load();
+    } catch (e) { setFormError(e.message); }
+    finally { setSaving(false); }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Delete this address?")) return;
+    try {
+      const res = await fetch(`${API_BASE}/addresses/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${user.token}` } });
+      if (!res.ok) throw new Error("Failed to delete");
+      load();
+    } catch (e) { alert(e.message); }
+  };
+
+  const handleSetDefault = async (id) => {
+    try {
+      await fetch(`${API_BASE}/addresses/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${user.token}` },
+        body: JSON.stringify({ isDefault: true }),
+      });
+      load();
+    } catch (e) { alert(e.message); }
+  };
+
+  if (!user) return <div className="no-results"><p>🔒</p><h3>Please sign in</h3><p>Sign in to manage your saved addresses.</p></div>;
+  if (loading) return <LoadingGrid/>;
+
+  return (
+    <div className="my-orders-page">
+      <div className="wishlist-header"><h2>Saved Addresses</h2><p>{addresses.length} address{addresses.length!==1?"es":""} saved</p></div>
+      {error && <div className="auth-general-error" style={{ marginBottom: 16 }}>⚠️ {error}</div>}
+      <div style={{ marginBottom: 16 }}>
+        <button className="cta-primary" onClick={() => setEditing({})}>+ Add New Address</button>
+      </div>
+      {addresses.length === 0 ? (
+        <div className="no-results"><p>📍</p><h3>No saved addresses yet</h3><p>Add one to speed up checkout next time.</p></div>
+      ) : (
+        <div className="orders-list">
+          {addresses.map(a => (
+            <div key={a.id} className="order-card">
+              <div className="order-card-body" style={{ borderTop: "none", paddingTop: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div>
+                    <p style={{ fontWeight: 700, marginBottom: 4 }}>{a.label} {a.isDefault && <span className="order-status-badge DELIVERED">Default</span>}</p>
+                    <p style={{ margin: "2px 0" }}>{a.name} · {a.phone}</p>
+                    <p style={{ margin: "2px 0", color: "var(--text-muted)" }}>{a.line1}{a.line2 ? `, ${a.line2}` : ""}</p>
+                    <p style={{ margin: "2px 0", color: "var(--text-muted)" }}>{a.city}, {a.state} — {a.pincode}</p>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <button className="admin-btn admin-btn-outline admin-btn-sm" onClick={() => setEditing(a)}>Edit</button>
+                    {!a.isDefault && <button className="admin-btn admin-btn-outline admin-btn-sm" onClick={() => handleSetDefault(a.id)}>Set Default</button>}
+                    <button className="admin-btn admin-btn-danger admin-btn-sm" onClick={() => handleDelete(a.id)}>Delete</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {editing !== null && (
+        <AddressForm initial={editing.id ? editing : null} saving={saving} error={formError}
+          onCancel={() => { setEditing(null); setFormError(""); }} onSave={handleSave}/>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PAYMENT METHODS
+// ─────────────────────────────────────────────────────────────────────────────
+function PaymentMethodsPage({ user }) {
+  const [method, setMethod] = useState("COD");
+  const [upiId, setUpiId] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (!user?.token) { setLoading(false); return; }
+    fetch(`${API_BASE}/users/me`, { headers: { Authorization: `Bearer ${user.token}` } })
+      .then(res => res.json())
+      .then(d => { setMethod(d.preferredPaymentMethod || "COD"); setUpiId(d.savedUpiId || ""); })
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [user?.token]);
+
+  const handleSave = async () => {
+    setSaving(true); setError(""); setSaved(false);
+    try {
+      const res = await fetch(`${API_BASE}/users/payment-preference`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${user.token}` },
+        body: JSON.stringify({ preferredPaymentMethod: method, savedUpiId: upiId || null }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to save");
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (e) { setError(e.message); }
+    finally { setSaving(false); }
+  };
+
+  if (!user) return <div className="no-results"><p>🔒</p><h3>Please sign in</h3><p>Sign in to manage payment preferences.</p></div>;
+  if (loading) return <LoadingGrid/>;
+
+  return (
+    <div className="my-orders-page">
+      <div className="wishlist-header"><h2>Payment Methods</h2><p>Your default checkout preference</p></div>
+      <div className="order-card" style={{ padding: 24 }}>
+        <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: 18 }}>
+          We don't store card numbers — that needs a proper payment gateway, which isn't connected yet.
+          For now you can set your preferred payment method so it's pre-selected at checkout, and save your UPI ID for quick reference.
+        </p>
+        {error && <div className="auth-general-error" style={{ marginBottom: 14 }}>⚠️ {error}</div>}
+        <div className="payment-methods">
+          {[
+            { key:"COD",  icon:"💵", label:"Cash on Delivery",     desc:"Pay when your order arrives" },
+            { key:"UPI",  icon:"📱", label:"UPI / GPay / PhonePe", desc:"Instant payment via UPI" },
+            { key:"CARD", icon:"💳", label:"Credit / Debit Card",  desc:"Visa, Mastercard, RuPay" },
+          ].map(m => (
+            <label key={m.key} className={`payment-option ${method===m.key?"selected":""}`}>
+              <input type="radio" name="pref-payment" checked={method===m.key} onChange={()=>setMethod(m.key)}/>
+              <span className="pay-icon">{m.icon}</span>
+              <div className="pay-info"><p className="pay-label">{m.label}</p><p className="pay-desc">{m.desc}</p></div>
+              <span className={`pay-radio ${method===m.key?"active":""}`}/>
+            </label>
+          ))}
+        </div>
+        {method === "UPI" && (
+          <div className="admin-form-row" style={{ marginTop: 16, maxWidth: 320 }}>
+            <label>Your UPI ID (optional, for your reference)</label>
+            <input value={upiId} onChange={e=>setUpiId(e.target.value)} placeholder="yourname@upi"/>
+          </div>
+        )}
+        <div className="admin-form-actions" style={{ justifyContent: "flex-start", marginTop: 20 }}>
+          <button className="admin-btn admin-btn-primary" disabled={saving} onClick={handleSave}>
+            {saving ? "Saving…" : saved ? "✓ Saved" : "Save Preference"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ACCOUNT SETTINGS
+// ─────────────────────────────────────────────────────────────────────────────
+function AccountSettingsPage({ user }) {
+  const [profile, setProfile] = useState(null);
+  const [name, setName] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [savingName, setSavingName] = useState(false);
+  const [nameError, setNameError] = useState("");
+  const [nameSaved, setNameSaved] = useState(false);
+
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [savingPass, setSavingPass] = useState(false);
+  const [passError, setPassError] = useState("");
+  const [passSaved, setPassSaved] = useState(false);
+
+  useEffect(() => {
+    if (!user?.token) { setLoading(false); return; }
+    fetch(`${API_BASE}/users/me`, { headers: { Authorization: `Bearer ${user.token}` } })
+      .then(res => res.json())
+      .then(d => { setProfile(d); setName(d.name); })
+      .finally(() => setLoading(false));
+  }, [user?.token]);
+
+  const handleSaveName = async () => {
+    if (!name.trim()) { setNameError("Name is required"); return; }
+    setSavingName(true); setNameError(""); setNameSaved(false);
+    try {
+      const res = await fetch(`${API_BASE}/users/me`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${user.token}` },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to update name");
+      setNameSaved(true);
+      // Keep the locally stored session's display name in sync
+      const updatedUser = { ...user, name: data.name };
+      localStorage.setItem("user", JSON.stringify(updatedUser));
+      setTimeout(() => setNameSaved(false), 2500);
+    } catch (e) { setNameError(e.message); }
+    finally { setSavingName(false); }
+  };
+
+  const handleChangePassword = async () => {
+    setPassError(""); setPassSaved(false);
+    if (!currentPassword || !newPassword) { setPassError("Please fill in both password fields."); return; }
+    if (newPassword.length < 6) { setPassError("New password must be at least 6 characters."); return; }
+    if (newPassword !== confirmPassword) { setPassError("Passwords do not match."); return; }
+    setSavingPass(true);
+    try {
+      const res = await fetch(`${API_BASE}/users/change-password`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${user.token}` },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to change password");
+      setPassSaved(true);
+      setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
+      setTimeout(() => setPassSaved(false), 2500);
+    } catch (e) { setPassError(e.message); }
+    finally { setSavingPass(false); }
+  };
+
+  if (!user) return <div className="no-results"><p>🔒</p><h3>Please sign in</h3><p>Sign in to manage your account.</p></div>;
+  if (loading) return <LoadingGrid/>;
+
+  return (
+    <div className="my-orders-page">
+      <div className="wishlist-header"><h2>Account Settings</h2><p>Manage your profile and password</p></div>
+
+      <div className="order-card" style={{ padding: 24, marginBottom: 16 }}>
+        <h3 style={{ marginTop: 0, fontSize: "1.05rem" }}>Profile</h3>
+        {nameError && <div className="auth-general-error" style={{ marginBottom: 12 }}>⚠️ {nameError}</div>}
+        <div className="admin-form-row">
+          <label>Full Name</label>
+          <input value={name} onChange={e=>setName(e.target.value)}/>
+        </div>
+        <div className="admin-form-row">
+          <label>Email</label>
+          <input value={profile?.email || ""} disabled style={{ background: "var(--surface2)", color: "var(--text-muted)" }}/>
+          <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: 4 }}>Email can't be changed here yet.</p>
+        </div>
+        <div className="admin-form-actions" style={{ justifyContent: "flex-start" }}>
+          <button className="admin-btn admin-btn-primary" disabled={savingName} onClick={handleSaveName}>
+            {savingName ? "Saving…" : nameSaved ? "✓ Saved" : "Save Name"}
+          </button>
+        </div>
+      </div>
+
+      <div className="order-card" style={{ padding: 24 }}>
+        <h3 style={{ marginTop: 0, fontSize: "1.05rem" }}>Change Password</h3>
+        {passError && <div className="auth-general-error" style={{ marginBottom: 12 }}>⚠️ {passError}</div>}
+        <div className="admin-form-row"><label>Current Password</label><input type="password" value={currentPassword} onChange={e=>setCurrentPassword(e.target.value)}/></div>
+        <div className="admin-two-col">
+          <div className="admin-form-row"><label>New Password</label><input type="password" value={newPassword} onChange={e=>setNewPassword(e.target.value)}/></div>
+          <div className="admin-form-row"><label>Confirm New Password</label><input type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)}/></div>
+        </div>
+        <div className="admin-form-actions" style={{ justifyContent: "flex-start" }}>
+          <button className="admin-btn admin-btn-primary" disabled={savingPass} onClick={handleChangePassword}>
+            {savingPass ? "Changing…" : passSaved ? "✓ Changed" : "Change Password"}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -2791,6 +3118,21 @@ export default function App() {
       {/* ══ MY CUSTOM ORDERS ══ */}
       {activeTab==="mycustomorders" && (
         <MyCustomOrdersPage user={user} onBrowse={()=>setActiveTab("madejustforyou")}/>
+      )}
+
+      {/* ══ SAVED ADDRESSES ══ */}
+      {activeTab==="addresses" && (
+        <SavedAddressesPage user={user}/>
+      )}
+
+      {/* ══ PAYMENT METHODS ══ */}
+      {activeTab==="paymentmethods" && (
+        <PaymentMethodsPage user={user}/>
+      )}
+
+      {/* ══ ACCOUNT SETTINGS ══ */}
+      {activeTab==="accountsettings" && (
+        <AccountSettingsPage user={user}/>
       )}
 
       {/* ══ WISHLIST ══ */}
