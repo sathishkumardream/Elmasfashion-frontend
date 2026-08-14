@@ -2622,11 +2622,19 @@ input, select { font-family: inherit; }
   transition: border-color var(--transition); width: 100%;
 }
 .addr-input:focus { border-color:var(--brand); background:#fff; }
-.saved-address-hint {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 0.82rem; color: var(--text-muted);
-  padding: 10px 14px; background: var(--surface2); border-radius: 8px;
+.saved-address-picker { margin-bottom: 18px; }
+.saved-address-picker-label { font-size: 0.85rem; font-weight: 600; color: var(--text); margin-bottom: 10px; }
+.saved-address-chips { display: flex; flex-wrap: wrap; gap: 10px; }
+.saved-address-chip {
+  text-align: left; min-width: 200px; max-width: 260px;
+  background: var(--surface2); border: 1.5px solid var(--border); border-radius: 10px;
+  padding: 10px 14px; cursor: pointer; transition: all var(--transition);
+  display: flex; flex-direction: column; gap: 3px;
 }
+.saved-address-chip:hover { border-color: var(--brand); }
+.saved-address-chip.selected { border-color: var(--brand); background: #fff; box-shadow: 0 0 0 2px rgba(201,24,74,0.15); }
+.saved-address-chip-label { font-size: 0.8rem; font-weight: 700; color: var(--dark2); }
+.saved-address-chip-line { font-size: 0.76rem; color: var(--text-muted); }
 
 /* ─── Payment methods ────────────────────────────────────────────────────────── */
 .payment-methods {

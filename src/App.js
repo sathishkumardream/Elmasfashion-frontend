@@ -7,6 +7,11 @@ import "./App.css";
 // ─────────────────────────────────────────────────────────────────────────────
 const API_BASE = (process.env.REACT_APP_API_URL || "http://localhost:5000/api").replace(/\/+$/, "");
 
+// We currently only ship within India. A valid Indian PIN code is exactly 6 digits,
+// and the first digit is never 0 (used to catch most non-Indian postal codes too,
+// e.g. US ZIPs commonly start differently, UK postcodes contain letters, etc.)
+const isValidIndianPincode = (pincode) => /^[1-9][0-9]{5}$/.test((pincode || "").trim());
+
 // Same direct-to-Cloudinary pattern used in the admin panel — lets customers attach a
 // reference photo to their custom stitch request. Falls back to nothing if not configured;
 // customers simply won't see the upload option (no crash, no broken UI).
@@ -703,6 +708,33 @@ function MadeJustForYou({ user, customFabricPick, onClearFabricPick, onBrowseSar
   const [payMethod, setPayMethod] = useState("cod");
   const setA = (k, v) => setAddress(a => ({ ...a, [k]: v }));
 
+  const [savedAddresses, setSavedAddresses] = useState([]);
+  const [selectedSavedId, setSelectedSavedId] = useState(null);
+
+  useEffect(() => {
+    if (!user?.token) return;
+    fetch(`${API_BASE}/addresses`, { headers: { Authorization: `Bearer ${user.token}` } })
+      .then(async res => {
+        const data = await res.json().catch(() => ([]));
+        return res.ok && Array.isArray(data) ? data : [];
+      })
+      .then(list => {
+        setSavedAddresses(list);
+        const def = list.find(a => a.isDefault);
+        if (def && !address.name) {
+          setAddress({ name:def.name, phone:def.phone, line1:def.line1, line2:def.line2||"", city:def.city, state:def.state||"", pincode:def.pincode });
+          setSelectedSavedId(def.id);
+        }
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.token]);
+
+  const pickSavedAddress = (a) => {
+    setAddress({ name:a.name, phone:a.phone, line1:a.line1, line2:a.line2||"", city:a.city, state:a.state||"", pincode:a.pincode });
+    setSelectedSavedId(a.id);
+  };
+
   const [stitchingSettings, setStitchingSettings] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
@@ -797,6 +829,10 @@ function MadeJustForYou({ user, customFabricPick, onClearFabricPick, onBrowseSar
   const handleProceedToPayment = () => {
     if (!address.name || !address.phone || !address.line1 || !address.city || !address.pincode) {
       setSubmitError("Please fill in all required address fields.");
+      return;
+    }
+    if (!isValidIndianPincode(address.pincode)) {
+      setSubmitError("Sorry, we currently only deliver within India — that doesn't look like a valid 6-digit Indian PIN code (non-serviceable area).");
       return;
     }
     setSubmitError("");
@@ -1085,28 +1121,49 @@ function MadeJustForYou({ user, customFabricPick, onClearFabricPick, onBrowseSar
               <h2 className="section-title">Delivery Address</h2>
             </div>
           </div>
+
+          {savedAddresses.length > 0 && (
+            <div className="saved-address-picker" style={{ maxWidth: 640 }}>
+              <p className="saved-address-picker-label">📍 Choose a saved address, or enter a new one below</p>
+              <div className="saved-address-chips">
+                {savedAddresses.map(a => (
+                  <button key={a.id} className={`saved-address-chip ${selectedSavedId===a.id?"selected":""}`} onClick={() => pickSavedAddress(a)}>
+                    <span className="saved-address-chip-label">{a.label}{a.isDefault && " · Default"}</span>
+                    <span className="saved-address-chip-line">{a.line1}, {a.city} — {a.pincode}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="address-form" style={{ maxWidth: 640 }}>
             <div className="addr-row two-col">
               {[{k:"name",l:"Full Name",p:"Your full name"},{k:"phone",l:"Mobile Number",p:"10-digit number"}].map(f=>(
                 <div key={f.k} className="addr-field">
                   <label>{f.l}</label>
-                  <input type="text" placeholder={f.p} value={address[f.k]} onChange={e=>setA(f.k,e.target.value)} className="addr-input"/>
+                  <input type="text" placeholder={f.p} value={address[f.k]} onChange={e=>{setA(f.k,e.target.value); setSelectedSavedId(null);}} className="addr-input"/>
                 </div>
               ))}
             </div>
             <div className="addr-field">
               <label>Address Line 1</label>
-              <input type="text" placeholder="Flat, House no., Building, Street" value={address.line1} onChange={e=>setA("line1",e.target.value)} className="addr-input"/>
+              <input type="text" placeholder="Flat, House no., Building, Street" value={address.line1} onChange={e=>{setA("line1",e.target.value); setSelectedSavedId(null);}} className="addr-input"/>
             </div>
             <div className="addr-field">
               <label>Address Line 2 <span className="optional-tag">Optional</span></label>
-              <input type="text" placeholder="Area, Colony, Locality" value={address.line2} onChange={e=>setA("line2",e.target.value)} className="addr-input"/>
+              <input type="text" placeholder="Area, Colony, Locality" value={address.line2} onChange={e=>{setA("line2",e.target.value); setSelectedSavedId(null);}} className="addr-input"/>
             </div>
             <div className="addr-row three-col">
               {[{k:"city",l:"City",p:"City"},{k:"state",l:"State",p:"State"},{k:"pincode",l:"Pincode",p:"6-digit pincode"}].map(f=>(
                 <div key={f.k} className="addr-field">
                   <label>{f.l}</label>
-                  <input type="text" placeholder={f.p} value={address[f.k]} onChange={e=>setA(f.k,e.target.value)} className="addr-input"/>
+                  <input type="text" placeholder={f.p} value={address[f.k]}
+                    onChange={e=>{
+                      const v = f.k==="pincode" ? e.target.value.replace(/\D/g,"") : e.target.value;
+                      setA(f.k,v); setSelectedSavedId(null);
+                    }}
+                    maxLength={f.k==="pincode"?6:undefined}
+                    className="addr-input"/>
                 </div>
               ))}
             </div>
@@ -1667,7 +1724,17 @@ function MyCustomOrdersPage({ user, onBrowse }) {
 // ─────────────────────────────────────────────────────────────────────────────
 function AddressForm({ initial, onSave, onCancel, saving, error }) {
   const [form, setForm] = useState(initial || { label:"Home", name:"", phone:"", line1:"", line2:"", city:"", state:"", pincode:"", isDefault:false });
+  const [pincodeError, setPincodeError] = useState("");
   const set = (k,v) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleSaveClick = () => {
+    if (!isValidIndianPincode(form.pincode)) {
+      setPincodeError("Sorry, we currently only deliver within India — that doesn't look like a valid 6-digit Indian PIN code (non-serviceable area).");
+      return;
+    }
+    setPincodeError("");
+    onSave(form);
+  };
 
   return (
     <div className="modal-overlay" onClick={onCancel}>
@@ -1690,14 +1757,18 @@ function AddressForm({ initial, onSave, onCancel, saving, error }) {
           <div className="admin-form-row"><label>City</label><input value={form.city} onChange={e=>set("city",e.target.value)}/></div>
           <div className="admin-form-row"><label>State</label><input value={form.state} onChange={e=>set("state",e.target.value)}/></div>
         </div>
-        <div className="admin-form-row"><label>Pincode</label><input value={form.pincode} onChange={e=>set("pincode",e.target.value)}/></div>
+        <div className="admin-form-row">
+          <label>Pincode</label>
+          <input value={form.pincode} maxLength={6} onChange={e=>{ set("pincode",e.target.value.replace(/\D/g,"")); setPincodeError(""); }}/>
+          {pincodeError && <p style={{ color:"#b91c1c", fontSize:"0.78rem", marginTop:6 }}>⚠️ {pincodeError}</p>}
+        </div>
         <div className="admin-form-row admin-checkbox-row">
           <input type="checkbox" checked={form.isDefault} onChange={e=>set("isDefault",e.target.checked)} id="addr-default"/>
           <label htmlFor="addr-default" style={{ marginBottom: 0 }}>Set as default address</label>
         </div>
         <div className="admin-form-actions">
           <button className="admin-btn admin-btn-outline" onClick={onCancel}>Cancel</button>
-          <button className="admin-btn admin-btn-primary" disabled={saving} onClick={()=>onSave(form)}>{saving?"Saving…":"Save Address"}</button>
+          <button className="admin-btn admin-btn-primary" disabled={saving} onClick={handleSaveClick}>{saving?"Saving…":"Save Address"}</button>
         </div>
       </div>
     </div>
@@ -1715,8 +1786,16 @@ function SavedAddressesPage({ user }) {
   const load = useCallback(() => {
     if (!user?.token) { setLoading(false); return; }
     setLoading(true);
+    setError("");
     fetch(`${API_BASE}/addresses`, { headers: { Authorization: `Bearer ${user.token}` } })
-      .then(res => res.json()).then(setAddresses).catch(e => setError(e.message)).finally(() => setLoading(false));
+      .then(async res => {
+        const data = await res.json().catch(() => ([]));
+        if (!res.ok) throw new Error(data.message || data.error || "Failed to load addresses");
+        return data;
+      })
+      .then(data => setAddresses(Array.isArray(data) ? data : []))
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
   }, [user?.token]);
 
   useEffect(() => { load(); }, [load]);
@@ -1814,7 +1893,11 @@ function PaymentMethodsPage({ user }) {
   useEffect(() => {
     if (!user?.token) { setLoading(false); return; }
     fetch(`${API_BASE}/users/me`, { headers: { Authorization: `Bearer ${user.token}` } })
-      .then(res => res.json())
+      .then(async res => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.message || data.error || "Failed to load payment preference");
+        return data;
+      })
       .then(d => { setMethod(d.preferredPaymentMethod || "COD"); setUpiId(d.savedUpiId || ""); })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
@@ -1896,11 +1979,18 @@ function AccountSettingsPage({ user }) {
   const [passError, setPassError] = useState("");
   const [passSaved, setPassSaved] = useState(false);
 
+  const [profileError, setProfileError] = useState("");
+
   useEffect(() => {
     if (!user?.token) { setLoading(false); return; }
     fetch(`${API_BASE}/users/me`, { headers: { Authorization: `Bearer ${user.token}` } })
-      .then(res => res.json())
+      .then(async res => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.message || data.error || "Failed to load your profile");
+        return data;
+      })
       .then(d => { setProfile(d); setName(d.name); })
+      .catch(e => setProfileError(e.message))
       .finally(() => setLoading(false));
   }, [user?.token]);
 
@@ -1951,6 +2041,7 @@ function AccountSettingsPage({ user }) {
   return (
     <div className="my-orders-page">
       <div className="wishlist-header"><h2>Account Settings</h2><p>Manage your profile and password</p></div>
+      {profileError && <div className="auth-general-error" style={{ marginBottom: 16 }}>⚠️ {profileError}</div>}
 
       <div className="order-card" style={{ padding: 24, marginBottom: 16 }}>
         <h3 style={{ marginTop: 0, fontSize: "1.05rem" }}>Profile</h3>
@@ -2003,6 +2094,35 @@ function CartPage({ cartItems, onUpdateQty, onRemove, onClearCart, onContinue, o
   const [placing, setPlacing] = useState(false);
   const [orderError, setOrderError] = useState("");
   const [placedOrder, setPlacedOrder] = useState(null);
+  const [pincodeError, setPincodeError] = useState("");
+
+  const [savedAddresses, setSavedAddresses] = useState([]);
+  const [selectedSavedId, setSelectedSavedId] = useState(null);
+
+  useEffect(() => {
+    if (!user?.token) return;
+    fetch(`${API_BASE}/addresses`, { headers: { Authorization: `Bearer ${user.token}` } })
+      .then(async res => {
+        const data = await res.json().catch(() => ([]));
+        return res.ok && Array.isArray(data) ? data : [];
+      })
+      .then(list => {
+        setSavedAddresses(list);
+        const def = list.find(a => a.isDefault);
+        if (def && !address.name) {
+          setAddress({ name:def.name, phone:def.phone, line1:def.line1, line2:def.line2||"", city:def.city, state:def.state||"", pincode:def.pincode });
+          setSelectedSavedId(def.id);
+        }
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.token]);
+
+  const pickSavedAddress = (a) => {
+    setAddress({ name:a.name, phone:a.phone, line1:a.line1, line2:a.line2||"", city:a.city, state:a.state||"", pincode:a.pincode });
+    setSelectedSavedId(a.id);
+    setPincodeError("");
+  };
 
   const FREE_SHIP_THRESHOLD = 999;
 
@@ -2257,36 +2377,52 @@ function CartPage({ cartItems, onUpdateQty, onRemove, onClearCart, onContinue, o
                 <h2 className="cart-section-title">Delivery Address</h2>
               </div>
 
+              {savedAddresses.length > 0 && (
+                <div className="saved-address-picker">
+                  <p className="saved-address-picker-label">📍 Choose a saved address, or enter a new one below</p>
+                  <div className="saved-address-chips">
+                    {savedAddresses.map(a => (
+                      <button key={a.id} className={`saved-address-chip ${selectedSavedId===a.id?"selected":""}`} onClick={() => pickSavedAddress(a)}>
+                        <span className="saved-address-chip-label">{a.label}{a.isDefault && " · Default"}</span>
+                        <span className="saved-address-chip-line">{a.line1}, {a.city} — {a.pincode}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="address-form">
                 <div className="addr-row two-col">
                   {[{k:"name",l:"Full Name",p:"Your full name"},{k:"phone",l:"Mobile Number",p:"10-digit number"}].map(f=>(
                     <div key={f.k} className="addr-field">
                       <label>{f.l}</label>
-                      <input type="text" placeholder={f.p} value={address[f.k]} onChange={e=>setA(f.k,e.target.value)} className="addr-input"/>
+                      <input type="text" placeholder={f.p} value={address[f.k]} onChange={e=>{setA(f.k,e.target.value); setSelectedSavedId(null);}} className="addr-input"/>
                     </div>
                   ))}
                 </div>
                 <div className="addr-field">
                   <label>Address Line 1</label>
-                  <input type="text" placeholder="Flat, House no., Building, Street" value={address.line1} onChange={e=>setA("line1",e.target.value)} className="addr-input"/>
+                  <input type="text" placeholder="Flat, House no., Building, Street" value={address.line1} onChange={e=>{setA("line1",e.target.value); setSelectedSavedId(null);}} className="addr-input"/>
                 </div>
                 <div className="addr-field">
                   <label>Address Line 2 <span className="optional-tag">Optional</span></label>
-                  <input type="text" placeholder="Area, Colony, Locality" value={address.line2} onChange={e=>setA("line2",e.target.value)} className="addr-input"/>
+                  <input type="text" placeholder="Area, Colony, Locality" value={address.line2} onChange={e=>{setA("line2",e.target.value); setSelectedSavedId(null);}} className="addr-input"/>
                 </div>
                 <div className="addr-row three-col">
                   {[{k:"city",l:"City",p:"City"},{k:"state",l:"State",p:"State"},{k:"pincode",l:"Pincode",p:"6-digit pincode"}].map(f=>(
                     <div key={f.k} className="addr-field">
                       <label>{f.l}</label>
-                      <input type="text" placeholder={f.p} value={address[f.k]} onChange={e=>setA(f.k,e.target.value)} className="addr-input"/>
+                      <input type="text" placeholder={f.p} value={address[f.k]}
+                        onChange={e=>{
+                          const v = f.k==="pincode" ? e.target.value.replace(/\D/g,"") : e.target.value;
+                          setA(f.k,v); setSelectedSavedId(null); if (f.k==="pincode") setPincodeError("");
+                        }}
+                        maxLength={f.k==="pincode"?6:undefined}
+                        className="addr-input"/>
                     </div>
                   ))}
                 </div>
-
-                <div className="saved-address-hint">
-                  <span>📍</span>
-                  <span>Use a <button className="auth-link bold">saved address</button> from your account</span>
-                </div>
+                {pincodeError && <p style={{ color:"#b91c1c", fontSize:"0.82rem", marginTop:8 }}>⚠️ {pincodeError}</p>}
               </div>
 
               <button
@@ -2294,6 +2430,10 @@ function CartPage({ cartItems, onUpdateQty, onRemove, onClearCart, onContinue, o
                 onClick={() => {
                   if (!address.name || !address.phone || !address.line1 || !address.city || !address.pincode) {
                     alert("Please fill all required address fields.");
+                    return;
+                  }
+                  if (!isValidIndianPincode(address.pincode)) {
+                    setPincodeError("Sorry, we currently only deliver within India — that doesn't look like a valid 6-digit Indian PIN code (non-serviceable area).");
                     return;
                   }
                   setCheckoutStep("payment");
