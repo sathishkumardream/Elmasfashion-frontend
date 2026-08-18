@@ -2709,6 +2709,7 @@ export default function App() {
   // ── Navigation ──
   const [activeTab, setActiveTab] = useState("home");
   const [openDropdown, setOpenDropdown] = useState(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // ── Search ──
   const [searchQuery, setSearchQuery] = useState("");
@@ -2911,6 +2912,9 @@ export default function App() {
 
       {/* Navbar */}
       <nav className="navbar" onClick={e=>e.stopPropagation()}>
+        <button className="mobile-menu-btn" onClick={()=>setMobileMenuOpen(o=>!o)} aria-label="Open menu">
+          <span/><span/><span/>
+        </button>
         <div className="nav-brand" onClick={()=>setActiveTab("home")}>
           <img src={logo} alt="logo" className="nav-logo" onError={e=>e.target.style.display="none"}/>
           <span className="brand-text">ELMA'S FASHION</span>
@@ -2989,6 +2993,74 @@ export default function App() {
           )}
         </div>
       </nav>
+
+      {/* ══ MOBILE MENU DRAWER ══ */}
+      {mobileMenuOpen && (
+        <div className="mobile-menu-overlay" onClick={()=>setMobileMenuOpen(false)}>
+          <div className="mobile-menu-drawer" onClick={e=>e.stopPropagation()}>
+            <div className="mobile-menu-header">
+              <span className="brand-text">ELMA'S FASHION</span>
+              <button className="mobile-menu-close" onClick={()=>setMobileMenuOpen(false)}>✕</button>
+            </div>
+
+            <div className="mobile-search-wrap">
+              <span className="search-icon">🔍</span>
+              <input type="text" placeholder="Search products..." value={searchQuery}
+                onChange={e=>setSearchQuery(e.target.value)}
+                onKeyDown={e=>{ if(e.key==="Enter"&&searchQuery){ navigateTo("collection","all"); setMobileMenuOpen(false); } }}
+                className="search-input"/>
+            </div>
+
+            <ul className="mobile-nav-links">
+              {NAV_LINKS.map(link=>(
+                <li key={link.key}>
+                  <button className={`mobile-nav-link ${link.special?"nav-link-special":""}`}
+                    onClick={()=>{
+                      if(link.key==="home"||link.key==="collection"||link.key==="madejustforyou") navigateTo(link.key);
+                      else navigateTo("collection",link.key);
+                      setMobileMenuOpen(false);
+                    }}>
+                    {link.label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+
+            <div className="mobile-menu-divider"/>
+
+            <div className="mobile-menu-actions">
+              <button className="mobile-menu-action-btn" onClick={()=>{ setActiveTab("wishlist"); setMobileMenuOpen(false); }}>
+                ♥ Wishlist <span className="badge-count">{wishlist.length}</span>
+              </button>
+              <button className="mobile-menu-action-btn" onClick={()=>{ setActiveTab("cart"); setMobileMenuOpen(false); }}>
+                🛒 Cart <span className="badge-count">{cartCount}</span>
+              </button>
+            </div>
+
+            <div className="mobile-menu-divider"/>
+
+            {user ? (
+              <div className="mobile-menu-account">
+                <p className="mobile-menu-account-name">👤 {user.name}</p>
+                {[{icon:"📦",label:"My Orders",tab:"myorders"},{icon:"🧵",label:"My Custom Orders",tab:"mycustomorders"},{icon:"📍",label:"Saved Addresses",tab:"addresses"},{icon:"💳",label:"Payment Methods",tab:"paymentmethods"},{icon:"⚙️",label:"Account Settings",tab:"accountsettings"}].map(item=>(
+                  <button key={item.tab} className="mobile-menu-action-btn" onClick={()=>{ setActiveTab(item.tab); setMobileMenuOpen(false); }}>
+                    {item.icon} {item.label}
+                  </button>
+                ))}
+                <button className="mobile-menu-action-btn logout" onClick={()=>{
+                  localStorage.removeItem("user"); localStorage.removeItem("token"); setUser(null);
+                  clearCart(); setWishlist([]); setMobileMenuOpen(false);
+                }}>🚪 Sign Out</button>
+              </div>
+            ) : (
+              <div className="mobile-menu-auth-btns">
+                <button className="nav-login-btn" onClick={()=>{ setAuthModal("login"); setMobileMenuOpen(false); }}>Sign In</button>
+                <button className="nav-register-btn" onClick={()=>{ setAuthModal("register"); setMobileMenuOpen(false); }}>Register</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ══ HOME ══ */}
       {activeTab==="home" && (

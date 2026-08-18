@@ -72,6 +72,21 @@ input, select { font-family: inherit; }
   cursor: pointer;
   flex-shrink: 0;
 }
+
+.mobile-menu-btn {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  width: 32px;
+  height: 32px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+}
+.mobile-menu-btn span { display: block; width: 22px; height: 2px; background: var(--dark2); border-radius: 2px; }
 .nav-logo { height: 38px; width: 38px; object-fit: contain; border-radius: 8px; }
 .brand-text {
   font-family: 'Playfair Display', serif;
@@ -2177,6 +2192,64 @@ input, select { font-family: inherit; }
 .mjfy-teaser:hover .teaser-icon-bubble { background: rgba(201,24,74,0.2); border-color: rgba(201,24,74,0.4); }
 
 /* ─── Responsive additions ─────────────────────────────────────────────────────── */
+
+/* Mobile navigation drawer */
+.mobile-menu-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 999;
+  animation: fadeIn 0.2s ease;
+}
+.mobile-menu-drawer {
+  position: fixed; top: 0; left: 0; bottom: 0; width: 280px; max-width: 85vw;
+  background: #fff; z-index: 1000; overflow-y: auto; box-shadow: var(--shadow-lg);
+  animation: slideInLeft 0.25s ease; display: flex; flex-direction: column;
+}
+@keyframes slideInLeft { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+.mobile-menu-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 20px; border-bottom: 1px solid var(--border);
+}
+.mobile-menu-close { background: none; border: none; font-size: 1.2rem; cursor: pointer; color: var(--text-muted); padding: 4px; }
+.mobile-search-wrap {
+  display: flex; align-items: center; gap: 8px; margin: 14px 16px;
+  padding: 8px 12px; background: var(--surface2); border-radius: 10px;
+}
+.mobile-search-wrap .search-input { border: none; background: none; flex: 1; font-size: 0.88rem; outline: none; }
+.mobile-nav-links { list-style: none; margin: 0; padding: 6px 0; }
+.mobile-nav-link {
+  display: block; width: 100%; text-align: left; padding: 12px 20px;
+  background: none; border: none; font-size: 0.95rem; font-weight: 500;
+  color: var(--text); cursor: pointer;
+}
+.mobile-nav-link:active { background: var(--surface2); }
+.mobile-nav-link.nav-link-special { color: var(--brand); font-weight: 700; }
+.mobile-menu-divider { height: 1px; background: var(--border); margin: 4px 0; }
+.mobile-menu-actions, .mobile-menu-account { display: flex; flex-direction: column; padding: 6px 0; }
+.mobile-menu-action-btn {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  padding: 12px 20px; background: none; border: none; font-size: 0.9rem;
+  color: var(--text); cursor: pointer;
+}
+.mobile-menu-action-btn:active { background: var(--surface2); }
+.mobile-menu-action-btn.logout { color: #dc2626; }
+.mobile-menu-account-name { padding: 8px 20px; font-weight: 700; font-size: 0.92rem; color: var(--dark2); }
+.mobile-menu-auth-btns { display: flex; flex-direction: column; gap: 10px; padding: 16px 20px; }
+.mobile-menu-auth-btns .nav-login-btn, .mobile-menu-auth-btns .nav-register-btn { width: 100%; text-align: center; padding: 11px; }
+
+/* Switch to mobile navigation below this width — the full desktop nav
+   (all category links + search bar + icons + auth buttons in one row)
+   does not fit reliably below ~1100px, so it collapses into the hamburger menu instead. */
+@media (max-width: 1100px) {
+  .mobile-menu-btn { display: flex; }
+  .navbar .nav-links { display: none; }
+  .navbar .search-wrap { display: none; }
+  .navbar .nav-login-btn, .navbar .nav-register-btn { display: none; }
+  .navbar { gap: 12px; }
+}
+@media (max-width: 480px) {
+  .mobile-menu-drawer { width: 260px; }
+  .brand-text { font-size: 0.85rem; }
+}
+
 @media (max-width: 1024px) {
   .combo-cards { grid-template-columns: 1fr 1fr; }
   .design-grid { grid-template-columns: 1fr 1fr; }
