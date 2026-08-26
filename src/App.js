@@ -2792,6 +2792,12 @@ export default function App() {
 
   // ── Hero ──
   const [heroSlide, setHeroSlide] = useState(0);
+  const [heroBanner, setHeroBanner] = useState(null); // admin-set background override for slide 1
+  useEffect(() => {
+    fetch(`${API_BASE}/hero-banner`)
+      .then(res => res.json()).then(setHeroBanner)
+      .catch(() => setHeroBanner(null)); // fetch failure just falls back to the default gradient
+  }, []);
 
   // ── Auth ──
   const [authModal, setAuthModal] = useState(null);
@@ -2830,8 +2836,18 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, products]);
 
+  const DEFAULT_HERO_BG = "linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%)";
+  // Admin can only override slide 1's background — headline/sub/CTA stay as-is either way.
+  // An image background gets a dark overlay layered on top so the existing white text stays readable.
+  const heroSlide1Bg =
+    heroBanner?.backgroundType === "image" && heroBanner.backgroundImage
+      ? `linear-gradient(rgba(10,14,30,0.55),rgba(10,14,30,0.55)), url("${heroBanner.backgroundImage}") center/cover no-repeat`
+      : heroBanner?.backgroundType === "color" && heroBanner.backgroundColor
+      ? heroBanner.backgroundColor
+      : DEFAULT_HERO_BG;
+
   const heroSlides = [
-    { bg:"linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%)", headline:"New Season Arrivals", sub:"Discover the latest in fashion — curated just for you", cta:"Shop Now" },
+    { bg:heroSlide1Bg, headline:"New Season Arrivals", sub:"Discover the latest in fashion — curated just for you", cta:"Shop Now" },
     { bg:"linear-gradient(135deg,#2d1b4e 0%,#6b2fa0 50%,#a855f7 100%)", headline:"Women's Exclusive Edit", sub:"Elevate your style with our premium women's collection", cta:"Explore Women's" },
     { bg:"linear-gradient(135deg,#0d2137 0%,#1a4b6e 50%,#2980b9 100%)", headline:"Men's Essentials", sub:"Smart, sharp, and effortlessly styled", cta:"Shop Men's" },
   ];

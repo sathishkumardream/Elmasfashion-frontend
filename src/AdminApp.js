@@ -1514,7 +1514,144 @@ const NAV_ITEMS = [
   { key: "orders", label: "Orders", icon: "📦" },
   { key: "promotions", label: "Promotions", icon: "🏷️" },
   { key: "madeforyou", label: "Made For You", icon: "🧵" },
+  { key: "herobanner", label: "Hero Banner", icon: "🖼️" },
 ];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HERO BANNER MANAGER — overrides only the background of the storefront's
+// first hero slide. Headline/subtext/CTA are not editable here; they stay
+// hardcoded in the storefront so this can't accidentally break their wording.
+// ─────────────────────────────────────────────────────────────────────────────
+const DEFAULT_HERO_PREVIEW_BG = "linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%)";
+
+function HeroBannerManager({ token }) {
+  const [backgroundType, setBackgroundType] = useState("default");
+  const [backgroundImage, setBackgroundImage] = useState("");
+  const [backgroundColor, setBackgroundColor] = useState("#1a1a2e");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    apiFetch("/hero-banner")
+      .then((s) => {
+        setBackgroundType(s.backgroundType || "default");
+        if (s.backgroundImage) setBackgroundImage(s.backgroundImage);
+        if (s.backgroundColor) setBackgroundColor(s.backgroundColor);
+      })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true); setError(""); setSaved(false);
+    try {
+      const body = { backgroundType };
+      if (backgroundType === "image") body.backgroundImage = backgroundImage;
+      if (backgroundType === "color") body.backgroundColor = backgroundColor;
+      await apiFetch("/hero-banner", { method: "PUT", token, body });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <div className="admin-loading">Loading…</div>;
+
+  const previewBg =
+    backgroundType === "image" && backgroundImage
+      ? `linear-gradient(rgba(10,14,30,0.55),rgba(10,14,30,0.55)), url("${backgroundImage}") center/cover no-repeat`
+      : backgroundType === "color" && backgroundColor
+      ? backgroundColor
+      : DEFAULT_HERO_PREVIEW_BG;
+
+  const canSave = backgroundType === "default"
+    || (backgroundType === "image" && backgroundImage.trim())
+    || (backgroundType === "color" && backgroundColor.trim());
+
+  return (
+    <div>
+      <h1 className="admin-page-title">Hero Banner</h1>
+      <p className="admin-page-sub">Customize the background of the homepage's first banner slide</p>
+
+      <div className="admin-panel">
+        <h3 className="admin-panel-title">Background</h3>
+        <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: 14 }}>
+          Only the background can be changed here — the headline, subtext, and buttons stay the same.
+          The other two rotating slides (Women's Exclusive Edit, Men's Essentials) aren't affected.
+        </p>
+        {error && <div className="admin-form-error">⚠️ {error}</div>}
+
+        <div className="admin-form-row">
+          <label>Background Source</label>
+          <select value={backgroundType} onChange={(e) => setBackgroundType(e.target.value)}>
+            <option value="default">Default (built-in gradient)</option>
+            <option value="image">Image</option>
+            <option value="color">Solid color / gradient</option>
+          </select>
+        </div>
+
+        {backgroundType === "image" && (
+          <div className="admin-form-row">
+            <label>Banner Image</label>
+            <ImageUploader value={backgroundImage} onChange={setBackgroundImage} />
+          </div>
+        )}
+
+        {backgroundType === "color" && (
+          <div className="admin-form-row" style={{ maxWidth: 320 }}>
+            <label>Color or CSS gradient</label>
+            <input
+              type="text"
+              value={backgroundColor}
+              onChange={(e) => setBackgroundColor(e.target.value)}
+              placeholder="#1a1a2e or linear-gradient(...)"
+            />
+            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: 4 }}>
+              Accepts any CSS color (e.g. <code>#c9184a</code>) or a full gradient (e.g. <code>linear-gradient(135deg,#1a1a2e,#0f3460)</code>).
+            </p>
+          </div>
+        )}
+
+        <div className="admin-form-row">
+          <label>Preview</label>
+          <div
+            style={{
+              background: previewBg,
+              borderRadius: 12,
+              padding: "40px 28px",
+              color: "#fff",
+              minHeight: 140,
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+            }}
+          >
+            <p style={{ color: "#f5a623", fontWeight: 700, fontSize: "0.75rem", letterSpacing: "0.08em", margin: "0 0 8px" }}>
+              ✦ SEASON'S BEST ✦
+            </p>
+            <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: "1.8rem", margin: "0 0 8px" }}>
+              New Season Arrivals
+            </h2>
+            <p style={{ fontSize: "0.85rem", opacity: 0.85, margin: 0 }}>
+              Discover the latest in fashion — curated just for you
+            </p>
+          </div>
+        </div>
+
+        <div className="admin-form-actions" style={{ justifyContent: "flex-start", marginTop: 18 }}>
+          <button className="admin-btn admin-btn-primary" disabled={saving || !canSave} onClick={handleSave}>
+            {saving ? "Saving…" : saved ? "✓ Saved" : "Save Banner"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function AdminApp() {
   const [admin, setAdmin] = useState(null);
@@ -1560,6 +1697,7 @@ export default function AdminApp() {
           {tab === "orders" && <OrdersManager token={admin.token} />}
           {tab === "promotions" && <PromotionsManager token={admin.token} />}
           {tab === "madeforyou" && <MadeForYouManager token={admin.token} />}
+          {tab === "herobanner" && <HeroBannerManager token={admin.token} />}
         </main>
       </div>
     </div>
