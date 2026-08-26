@@ -102,6 +102,9 @@ input, select { font-family: inherit; }
   align-items: center;
   gap: 4px;
   flex: 1;
+  min-width: 0; /* flex items default to min-width:auto, which lets nowrap
+                   nav-link content force the row wider than its container
+                   instead of shrinking; this re-enables normal shrink behavior */
 }
 .nav-link {
   font-size: 0.875rem;
@@ -2237,8 +2240,10 @@ input, select { font-family: inherit; }
 
 /* Switch to mobile navigation below this width — the full desktop nav
    (all category links + search bar + icons + auth buttons in one row)
-   does not fit reliably below ~1100px, so it collapses into the hamburger menu instead. */
-@media (max-width: 1100px) {
+   needs ~1538px of content width to render without overflowing (measured
+   headlessly), so the breakpoint is raised to 1560px (with a small buffer)
+   to collapse into the hamburger menu before that overflow can occur. */
+@media (max-width: 1560px) {
   .mobile-menu-btn { display: flex; }
   .navbar .nav-links { display: none; }
   .navbar .search-wrap { display: none; }
