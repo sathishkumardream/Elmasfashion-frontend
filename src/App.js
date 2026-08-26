@@ -189,6 +189,19 @@ const NAV_LINKS = [
   { key:"madejustforyou",label:"✦ Made For You",dropdown:false, special:true },
 ];
 
+// Promotion records only store type/value/minOrderValue — the storefront derives
+// a human-readable title/sub/icon from those so the voucher cards stay readable
+// no matter what an admin creates.
+const VOUCHER_ICONS = { PERCENT: "🎯", FLAT: "💰", SHIPPING: "🚚" };
+const voucherDisplay = (p) => {
+  const icon = VOUCHER_ICONS[p.type] || "🏷️";
+  const orderNote = p.minOrderValue > 0 ? `Orders above ₹${p.minOrderValue}` : "On your order";
+  if (p.type === "PERCENT") return { icon, title: `FLAT ${p.value}% OFF`, sub: orderNote };
+  if (p.type === "FLAT") return { icon, title: `₹${p.value} OFF`, sub: orderNote };
+  if (p.type === "SHIPPING") return { icon, title: "FREE SHIPPING", sub: orderNote };
+  return { icon, title: p.code, sub: "Limited time offer" };
+};
+
 const PRICE_RANGES = [
   { label:"Under ₹500",    min:0,    max:500   },
   { label:"₹500 – ₹1000",  min:500,  max:1000  },
@@ -2799,6 +2812,20 @@ export default function App() {
       .catch(() => setHeroBanner(null)); // fetch failure just falls back to the default gradient
   }, []);
 
+  // ── Vouchers (real, admin-created promotions) ──
+  const [activePromotions, setActivePromotions] = useState([]);
+  const [copiedVoucherCode, setCopiedVoucherCode] = useState(null);
+  useEffect(() => {
+    fetch(`${API_BASE}/promotions/active`)
+      .then(res => res.json()).then(data => setActivePromotions(Array.isArray(data) ? data : []))
+      .catch(() => setActivePromotions([]));
+  }, []);
+  const handleVoucherClick = (code) => {
+    navigator.clipboard?.writeText(code).catch(() => {});
+    setCopiedVoucherCode(code);
+    setTimeout(() => setCopiedVoucherCode(c => (c === code ? null : c)), 1500);
+  };
+
   // ── Auth ──
   const [authModal, setAuthModal] = useState(null);
   const [user, setUser] = useState(null); // { name, email, token }
@@ -3098,20 +3125,21 @@ export default function App() {
             </div>
           </section>
 
-          <section className="vouchers">
-            {[
-              {icon:"🎯",title:"FLAT 20% OFF",sub:"On Men's Wear",code:"MEN20"},
-              {icon:"👗",title:"BUY 1 GET 1",sub:"Women's Collection",code:"BOGO"},
-              {icon:"💰",title:"₹500 OFF",sub:"Orders above ₹1999",code:"SAVE500"},
-              {icon:"🧵",title:"CUSTOM STITCH",sub:"Made Just For You",code:"STITCH10"},
-            ].map((v,i)=>(
-              <div key={i} className="voucher-card">
-                <span className="voucher-icon">{v.icon}</span>
-                <h4>{v.title}</h4><p>{v.sub}</p>
-                <span className="voucher-code">{v.code}</span>
-              </div>
-            ))}
-          </section>
+          {activePromotions.length > 0 && (
+            <section className="vouchers">
+              {activePromotions.map((p) => {
+                const { icon, title, sub } = voucherDisplay(p);
+                const copied = copiedVoucherCode === p.code;
+                return (
+                  <div key={p.id} className="voucher-card" onClick={() => handleVoucherClick(p.code)} title="Click to copy code">
+                    <span className="voucher-icon">{icon}</span>
+                    <h4>{title}</h4><p>{sub}</p>
+                    <span className="voucher-code">{copied ? "Copied!" : p.code}</span>
+                  </div>
+                );
+              })}
+            </section>
+          )}
 
           <section className="section">
             <div className="section-header">

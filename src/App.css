@@ -316,7 +316,7 @@ input, select { font-family: inherit; }
 /* ─── Vouchers ───────────────────────────────────────────────────────────────── */
 .vouchers {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
   padding: 28px 40px;
   background: var(--dark2);
