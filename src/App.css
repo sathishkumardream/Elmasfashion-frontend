@@ -2238,17 +2238,37 @@ input, select { font-family: inherit; }
 .mobile-menu-auth-btns { display: flex; flex-direction: column; gap: 10px; padding: 16px 20px; }
 .mobile-menu-auth-btns .nav-login-btn, .mobile-menu-auth-btns .nav-register-btn { width: 100%; text-align: center; padding: 11px; }
 
-/* Switch to mobile navigation below this width — the full desktop nav
-   (all category links + search bar + icons + auth buttons in one row)
-   needs ~1538px of content width to render without overflowing (measured
-   headlessly), so the breakpoint is raised to 1560px (with a small buffer)
-   to collapse into the hamburger menu before that overflow can occur. */
-@media (max-width: 1560px) {
+/* Hamburger menu only for phones/small tablets. The full-size desktop nav
+   needs ~1538px of content width to render without overflowing, so screens
+   between this breakpoint and that width use the compact layout below
+   instead of either overflowing or falling back to the hamburger. */
+@media (max-width: 900px) {
   .mobile-menu-btn { display: flex; }
   .navbar .nav-links { display: none; }
   .navbar .search-wrap { display: none; }
   .navbar .nav-login-btn, .navbar .nav-register-btn { display: none; }
   .navbar { gap: 12px; }
+}
+
+/* Compact desktop nav for laptop/tablet widths (901px–1560px): the hamburger
+   is gone, all nav items stay visible, but spacing/sizing is tightened so
+   the row fits without horizontal overflow. Values verified headlessly
+   against the narrowest width in this range (901px). */
+@media (min-width: 901px) and (max-width: 1560px) {
+  .navbar { padding: 0 16px; gap: 10px; }
+  .nav-logo { height: 30px; width: 30px; }
+  .brand-text { font-size: 0.92rem; }
+  .nav-links { gap: 0; }
+  .nav-link { padding: 6px 7px; font-size: 0.78rem; }
+  .nav-actions { gap: 4px; }
+  .search-wrap { width: 120px; padding: 5px 10px; gap: 5px; }
+  .search-wrap.focused { width: 200px; }
+  .search-icon { font-size: 0.8rem; }
+  .search-input { font-size: 0.78rem; }
+  .nav-icon-btn { padding: 6px; font-size: 0.95rem; }
+  .cart-btn { padding: 6px 9px; font-size: 0.78rem; }
+  .auth-nav-btns { gap: 4px; }
+  .nav-login-btn, .nav-register-btn { padding: 6px 9px; font-size: 0.75rem; }
 }
 @media (max-width: 480px) {
   .mobile-menu-drawer { width: 260px; }
