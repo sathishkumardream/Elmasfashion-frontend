@@ -401,6 +401,15 @@ input, select { font-family: inherit; }
 }
 .cat-card:hover { transform: translateY(-6px); box-shadow: var(--shadow-lg); }
 .cat-card:hover::before { opacity: 0; }
+/* Photo cards need a stronger, more persistent overlay than the gradient
+   cards do — a real photo has much more visual noise than a flat gradient,
+   so text needs more contrast, and it shouldn't vanish entirely on hover. */
+.cat-card.has-image {
+  background-size: cover;
+  background-position: center;
+}
+.cat-card.has-image::before { background: rgba(0,0,0,0.4); }
+.cat-card.has-image:hover::before { opacity: 0.55; }
 .cat-emoji {
   font-size: 2.5rem;
   position: absolute;

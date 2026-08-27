@@ -2826,6 +2826,14 @@ export default function App() {
     setTimeout(() => setCopiedVoucherCode(c => (c === code ? null : c)), 1500);
   };
 
+  // ── Category card images (admin-uploaded, optional per category) ──
+  const [categoryImages, setCategoryImages] = useState({});
+  useEffect(() => {
+    fetch(`${API_BASE}/category-images`)
+      .then(res => res.json()).then(setCategoryImages)
+      .catch(() => setCategoryImages({})); // fetch failure just falls back to default gradient cards
+  }, []);
+
   // ── Auth ──
   const [authModal, setAuthModal] = useState(null);
   const [user, setUser] = useState(null); // { name, email, token }
@@ -3152,13 +3160,21 @@ export default function App() {
                 {key:"women",label:"Women's Fashion",emoji:"👗",items:"200+ Styles",gradient:"linear-gradient(135deg,#4a0e4e,#81267d,#e91e8c)"},
                 {key:"boys",label:"Boys",emoji:"🧒",items:"80+ Styles",gradient:"linear-gradient(135deg,#003049,#0077b6,#00b4d8)"},
                 {key:"girls",label:"Girls",emoji:"👧",items:"90+ Styles",gradient:"linear-gradient(135deg,#7b0038,#c9184a,#ff4d6d)"},
-              ].map(cat=>(
-                <div key={cat.key} className="cat-card" style={{background:cat.gradient}} onClick={()=>navigateTo("collection",cat.key)}>
-                  <span className="cat-emoji">{cat.emoji}</span>
-                  <h3>{cat.label}</h3><p>{cat.items}</p>
-                  <span className="cat-arrow">→</span>
-                </div>
-              ))}
+              ].map(cat=>{
+                const img = categoryImages[cat.key];
+                return (
+                  <div
+                    key={cat.key}
+                    className={`cat-card ${img ? "has-image" : ""}`}
+                    style={img ? { backgroundImage: `url("${img}")` } : { background: cat.gradient }}
+                    onClick={()=>navigateTo("collection",cat.key)}
+                  >
+                    {!img && <span className="cat-emoji">{cat.emoji}</span>}
+                    <h3>{cat.label}</h3><p>{cat.items}</p>
+                    <span className="cat-arrow">→</span>
+                  </div>
+                );
+              })}
             </div>
           </section>
 

@@ -1515,7 +1515,110 @@ const NAV_ITEMS = [
   { key: "promotions", label: "Promotions", icon: "🏷️" },
   { key: "madeforyou", label: "Made For You", icon: "🧵" },
   { key: "herobanner", label: "Hero Banner", icon: "🖼️" },
+  { key: "categoryimages", label: "Category Images", icon: "🗂️" },
 ];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CATEGORY IMAGES MANAGER — lets admin swap the "Shop by Category" cards'
+// default gradient+emoji design for a real photo, per category. Clearing a
+// category's image reverts that one card back to the default design.
+// ─────────────────────────────────────────────────────────────────────────────
+const CATEGORY_DEFS = [
+  { key: "men", label: "Men's Fashion", emoji: "👔" },
+  { key: "women", label: "Women's Fashion", emoji: "👗" },
+  { key: "boys", label: "Boys", emoji: "🧒" },
+  { key: "girls", label: "Girls", emoji: "👧" },
+];
+
+function CategoryImagesManager({ token }) {
+  const [images, setImages] = useState({});
+  const [drafts, setDrafts] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [savingKey, setSavingKey] = useState(null);
+  const [savedKey, setSavedKey] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    apiFetch("/category-images")
+      .then((map) => { setImages(map); setDrafts(map); })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async (key) => {
+    setSavingKey(key); setError(""); setSavedKey(null);
+    try {
+      const updated = await apiFetch(`/category-images/${key}`, { method: "PUT", token, body: { imageUrl: drafts[key] || null } });
+      setImages((prev) => ({ ...prev, [key]: updated.imageUrl }));
+      setSavedKey(key);
+      setTimeout(() => setSavedKey((k) => (k === key ? null : k)), 2000);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  if (loading) return <div className="admin-loading">Loading…</div>;
+
+  return (
+    <div>
+      <h1 className="admin-page-title">Category Images</h1>
+      <p className="admin-page-sub">
+        Upload a real lifestyle photo for each "Shop by Category" card. Leave one blank to keep its default gradient design.
+      </p>
+      {error && <div className="admin-form-error">⚠️ {error}</div>}
+
+      {CATEGORY_DEFS.map((cat) => {
+        const draft = drafts[cat.key];
+        const live = images[cat.key];
+        const dirty = draft !== live;
+        return (
+          <div className="admin-panel" key={cat.key} style={{ marginBottom: 18 }}>
+            <h3 className="admin-panel-title">{cat.emoji} {cat.label}</h3>
+
+            <div className="admin-form-row">
+              <label>Category Image</label>
+              <ImageUploader value={draft || ""} onChange={(url) => setDrafts((prev) => ({ ...prev, [cat.key]: url }))} />
+            </div>
+
+            <div className="admin-form-row">
+              <label>Preview</label>
+              <div
+                style={{
+                  background: draft ? `url("${draft}") center/cover no-repeat` : "linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)",
+                  borderRadius: 12,
+                  minHeight: 140,
+                  color: "#fff",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "flex-end",
+                  padding: 20,
+                  position: "relative",
+                  overflow: "hidden",
+                }}
+              >
+                <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.35)" }} />
+                <h4 style={{ position: "relative", margin: 0, fontFamily: "'Playfair Display', serif" }}>{cat.label}</h4>
+              </div>
+            </div>
+
+            <div className="admin-form-actions" style={{ justifyContent: "flex-start", marginTop: 10, display: "flex", gap: 10 }}>
+              <button className="admin-btn admin-btn-primary" disabled={savingKey === cat.key || !dirty} onClick={() => handleSave(cat.key)}>
+                {savingKey === cat.key ? "Saving…" : savedKey === cat.key ? "✓ Saved" : "Save"}
+              </button>
+              {draft && (
+                <button className="admin-btn admin-btn-outline" disabled={savingKey === cat.key} onClick={() => setDrafts((prev) => ({ ...prev, [cat.key]: null }))}>
+                  Clear (use default)
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HERO BANNER MANAGER — overrides only the background of the storefront's
@@ -1698,6 +1801,7 @@ export default function AdminApp() {
           {tab === "promotions" && <PromotionsManager token={admin.token} />}
           {tab === "madeforyou" && <MadeForYouManager token={admin.token} />}
           {tab === "herobanner" && <HeroBannerManager token={admin.token} />}
+          {tab === "categoryimages" && <CategoryImagesManager token={admin.token} />}
         </main>
       </div>
     </div>
