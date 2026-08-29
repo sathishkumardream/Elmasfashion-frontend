@@ -202,6 +202,67 @@ const voucherDisplay = (p) => {
   return { icon, title: p.code, sub: "Limited time offer" };
 };
 
+// Starter copy for the Size Guide / Returns Policy footer popups — plain,
+// standard content so the links aren't dead ends. Store owner should review
+// and adjust the specifics (measurements, exact policy terms) before launch.
+const SIZE_CHART_ROWS = [
+  { size: "XS",  chest: "34", waist: "28", hip: "36" },
+  { size: "S",   chest: "36", waist: "30", hip: "38" },
+  { size: "M",   chest: "38", waist: "32", hip: "40" },
+  { size: "L",   chest: "40", waist: "34", hip: "42" },
+  { size: "XL",  chest: "42", waist: "36", hip: "44" },
+  { size: "XXL", chest: "44", waist: "38", hip: "46" },
+  { size: "XXXL",chest: "46", waist: "40", hip: "48" },
+];
+
+function SizeGuideContent() {
+  return (
+    <>
+      <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", marginBottom: 14 }}>
+        All measurements are in inches. For the best fit, measure a similar garment you already own and compare it to the chart below.
+      </p>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.88rem" }}>
+        <thead>
+          <tr style={{ borderBottom: "2px solid var(--border)" }}>
+            <th style={{ textAlign: "left", padding: "8px 6px" }}>Size</th>
+            <th style={{ textAlign: "left", padding: "8px 6px" }}>Chest</th>
+            <th style={{ textAlign: "left", padding: "8px 6px" }}>Waist</th>
+            <th style={{ textAlign: "left", padding: "8px 6px" }}>Hip</th>
+          </tr>
+        </thead>
+        <tbody>
+          {SIZE_CHART_ROWS.map(r => (
+            <tr key={r.size} style={{ borderBottom: "1px solid var(--border)" }}>
+              <td style={{ padding: "8px 6px", fontWeight: 700 }}>{r.size}</td>
+              <td style={{ padding: "8px 6px" }}>{r.chest}"</td>
+              <td style={{ padding: "8px 6px" }}>{r.waist}"</td>
+              <td style={{ padding: "8px 6px" }}>{r.hip}"</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p style={{ color: "var(--text-muted)", fontSize: "0.82rem", marginTop: 14 }}>
+        Ordering a Custom Stitch item? We'll confirm your exact measurements with you directly before stitching begins.
+      </p>
+    </>
+  );
+}
+
+function ReturnsPolicyContent() {
+  return (
+    <div style={{ color: "var(--text-muted)", fontSize: "0.9rem", lineHeight: 1.7 }}>
+      <p>We want you to love what you ordered. If something isn't right, you can request a return or exchange within <strong>7 days</strong> of delivery.</p>
+      <ul style={{ paddingLeft: 20, margin: "10px 0" }}>
+        <li>Items must be unused, unwashed, and with original tags attached.</li>
+        <li>Once we receive and inspect the item, refunds are issued to your original payment method.</li>
+        <li>Custom Stitch orders are made specifically for you and aren't eligible for return or exchange, except in the case of a manufacturing defect.</li>
+      </ul>
+      <p>To start a return, go to <strong>My Orders</strong> and select the order you'd like to return, or reach out via Contact Us and our team will help.</p>
+    </div>
+  );
+}
+
+// PRICE_RANGES + VOUCHER_ICONS below are pre-existing storefront constants
 const PRICE_RANGES = [
   { label:"Under ₹500",    min:0,    max:500   },
   { label:"₹500 – ₹1000",  min:500,  max:1000  },
@@ -378,6 +439,7 @@ function ProductModal({ product, onClose, onWishlist, wishlist, onAddToCart, onB
   const [selColor, setSelColor] = useState(null);
   const [qty, setQty] = useState(1);
   const [cartMsg, setCartMsg] = useState(null); // success/error feedback
+  const [showSizeGuide, setShowSizeGuide] = useState(false);
 
   const isWished = wishlist.includes(product.id);
 
@@ -579,7 +641,7 @@ function ProductModal({ product, onClose, onWishlist, wishlist, onAddToCart, onB
               <div className="modal-section">
                 <p className="option-label">
                   Size&nbsp;
-                  <button type="button" className="size-guide" onClick={e => e.preventDefault()}>Size Guide</button>
+                  <button type="button" className="size-guide" onClick={() => setShowSizeGuide(true)}>Size Guide</button>
                 </p>
                 <div className="size-options">
                   {sizeOptions.map(s => (
@@ -651,6 +713,15 @@ function ProductModal({ product, onClose, onWishlist, wishlist, onAddToCart, onB
           </div>
         </div>
       </div>
+      {showSizeGuide && (
+        <div className="modal-overlay" onClick={() => setShowSizeGuide(false)} style={{ zIndex: 1001 }}>
+          <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: 480, padding: 26 }}>
+            <button className="modal-close" onClick={() => setShowSizeGuide(false)}>✕</button>
+            <h2 style={{ marginTop: 0, marginBottom: 16 }}>Size Guide</h2>
+            <SizeGuideContent/>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2733,6 +2804,8 @@ export default function App() {
   const [filterSubcategory, setFilterSubcategory] = useState(null);
   const [filterPrice, setFilterPrice] = useState(null);
   const [filterRating, setFilterRating] = useState(null);
+  const [saleOnly, setSaleOnly] = useState(false); // "Sale" footer link: show only discounted products
+  const [infoModal, setInfoModal] = useState(null); // null | "sizeguide" | "returns" — footer/legal info popups
   const [sortBy, setSortBy] = useState("popular");
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -2910,7 +2983,13 @@ export default function App() {
     setActiveTab(tab);
     if (category) setFilterCategory(category); else if (tab==="collection") setFilterCategory("all");
     setFilterSubcategory(subcategory);
+    setSaleOnly(false); // any normal navigation clears the "Sale" footer filter so it doesn't stick around unexpectedly
     setOpenDropdown(null);
+  };
+
+  const viewSaleItems = () => {
+    navigateTo("collection");
+    setSaleOnly(true);
   };
 
   const handleDropdownSelect = (category, subcategory) => {
@@ -2925,11 +3004,12 @@ export default function App() {
       const subMatch = !filterSubcategory || p.subcategory === filterSubcategory;
       const priceMatch = !filterPrice || (p.price >= filterPrice.min && p.price <= filterPrice.max);
       const ratingMatch = !filterRating || p.rating >= filterRating;
+      const saleMatch = !saleOnly || (p.originalPrice && p.originalPrice > p.price);
       const searchMatch = !searchQuery ||
         p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (p.description || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
         p.categoryKey.includes(searchQuery.toLowerCase());
-      return catMatch && subMatch && priceMatch && ratingMatch && searchMatch;
+      return catMatch && subMatch && priceMatch && ratingMatch && saleMatch && searchMatch;
     })
     .sort((a,b) => {
       if (sortBy==="price_asc")  return a.price - b.price;
@@ -3240,19 +3320,39 @@ export default function App() {
             <div className="footer-grid">
               <div>
                 <h4>ELMA'S FASHION</h4>
-                <p>Your destination for the latest trends in men's, women's, and kids' fashion — plus custom stitch services.</p>
+                <p>
+                  Elma's Fashion is your online destination for trendy men's, women's, boys', and girls' clothing in India,
+                  with new-season styles added regularly across ethnic wear, casuals, and everyday essentials.
+                  Beyond ready-to-wear, our Made For You custom stitching service lets you get sarees and outfits
+                  tailored to your exact measurements — quality fashion, delivered to your door.
+                </p>
               </div>
               <div>
                 <h4>Quick Links</h4>
-                <ul>{["Men","Women","Boys","Girls","Made For You","Sale"].map(l=><li key={l}><span className="footer-link">{l}</span></li>)}</ul>
+                <ul>
+                  <li><span className="footer-link" onClick={()=>navigateTo("collection","men")}>Men</span></li>
+                  <li><span className="footer-link" onClick={()=>navigateTo("collection","women")}>Women</span></li>
+                  <li><span className="footer-link" onClick={()=>navigateTo("collection","boys")}>Boys</span></li>
+                  <li><span className="footer-link" onClick={()=>navigateTo("collection","girls")}>Girls</span></li>
+                  <li><span className="footer-link" onClick={()=>navigateTo("madejustforyou")}>Made For You</span></li>
+                  <li><span className="footer-link" onClick={viewSaleItems}>Sale</span></li>
+                </ul>
               </div>
               <div>
                 <h4>Customer Care</h4>
-                <ul>{["My Orders","Custom Orders","Returns","Track Order","Size Guide","Contact Us"].map(l=><li key={l}><span className="footer-link">{l}</span></li>)}</ul>
+                <ul>
+                  <li><span className="footer-link" onClick={()=>navigateTo("myorders")}>My Orders</span></li>
+                  <li><span className="footer-link" onClick={()=>navigateTo("mycustomorders")}>Custom Orders</span></li>
+                  <li><span className="footer-link" onClick={()=>setInfoModal("returns")}>Returns</span></li>
+                  <li><span className="footer-link" onClick={()=>navigateTo("myorders")}>Track Order</span></li>
+                  <li><span className="footer-link" onClick={()=>setInfoModal("sizeguide")}>Size Guide</span></li>
+                  <li><a className="footer-link" href="mailto:elmafashionstore@gmail.com">Contact Us</a></li>
+                </ul>
               </div>
               <div>
                 <h4>Connect</h4>
-                <p>📧 hello@elmasfashion.in</p><p>📞 1800-XXX-XXXX</p>
+                <p><a href="mailto:elmafashionstore@gmail.com" className="footer-contact-link">📧 elmafashionstore@gmail.com</a></p>
+                <p><a href="tel:+919445579303" className="footer-contact-link">📞 +91 94455 79303</a></p>
                 <div className="social-links">
                   {["📘","📷","🐦","▶️"].map((s,i)=><span key={i} className="social-icon">{s}</span>)}
                 </div>
@@ -3264,6 +3364,17 @@ export default function App() {
             </div>
           </footer>
         </>
+      )}
+
+      {/* ══ FOOTER INFO MODALS (Size Guide / Returns) ══ */}
+      {infoModal && (
+        <div className="modal-overlay" onClick={()=>setInfoModal(null)}>
+          <div className="modal-box" onClick={e=>e.stopPropagation()} style={{ maxWidth: 520, padding: 28 }}>
+            <button className="modal-close" onClick={()=>setInfoModal(null)}>✕</button>
+            <h2 style={{ marginTop: 0, marginBottom: 16 }}>{infoModal === "sizeguide" ? "Size Guide" : "Returns & Exchanges"}</h2>
+            {infoModal === "sizeguide" ? <SizeGuideContent/> : <ReturnsPolicyContent/>}
+          </div>
+        </div>
       )}
 
       {/* ══ COLLECTION ══ */}
@@ -3278,7 +3389,7 @@ export default function App() {
           <aside className={`filter-sidebar ${sidebarOpen?"open":""}`}>
             <div className="sidebar-header">
               <h3>Filters</h3>
-              <button className="clear-filters" onClick={()=>{ setFilterCategory("all"); setFilterSubcategory(null); setFilterPrice(null); setFilterRating(null); }}>Clear All</button>
+              <button className="clear-filters" onClick={()=>{ setFilterCategory("all"); setFilterSubcategory(null); setFilterPrice(null); setFilterRating(null); setSaleOnly(false); }}>Clear All</button>
             </div>
             <div className="filter-section">
               <h4>Category</h4>
@@ -3355,6 +3466,7 @@ export default function App() {
             </div>
 
             <div className="active-filters">
+              {saleOnly&&<span className="filter-chip">Sale<button onClick={()=>setSaleOnly(false)}>✕</button></span>}
               {filterCategory!=="all"&&<span className="filter-chip">{filterCategory}<button onClick={()=>{ setFilterCategory("all"); setFilterSubcategory(null); }}>✕</button></span>}
               {filterSubcategory&&<span className="filter-chip">{SUBCATEGORIES[filterCategory]?.find(s=>s.key===filterSubcategory)?.label||filterSubcategory}<button onClick={()=>setFilterSubcategory(null)}>✕</button></span>}
               {filterPrice&&<span className="filter-chip">{filterPrice.label}<button onClick={()=>setFilterPrice(null)}>✕</button></span>}
@@ -3368,7 +3480,7 @@ export default function App() {
                <div className="no-results">
                  <p>😕</p><h3>No products found</h3>
                  <p>Try changing your filters or search query.</p>
-                 <button className="cta-primary" onClick={()=>{ setFilterCategory("all"); setFilterSubcategory(null); setFilterPrice(null); setFilterRating(null); setSearchQuery(""); }}>Reset Filters</button>
+                 <button className="cta-primary" onClick={()=>{ setFilterCategory("all"); setFilterSubcategory(null); setFilterPrice(null); setFilterRating(null); setSearchQuery(""); setSaleOnly(false); }}>Reset Filters</button>
                </div>
              ) : (
                <div className="products-grid">
