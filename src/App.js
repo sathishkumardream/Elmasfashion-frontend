@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import logo from "./Logo.png";
 import "./App.css";
 
@@ -440,6 +440,19 @@ function ProductModal({ product, onClose, onWishlist, wishlist, onAddToCart, onB
   const [qty, setQty] = useState(1);
   const [cartMsg, setCartMsg] = useState(null); // success/error feedback
   const [showSizeGuide, setShowSizeGuide] = useState(false);
+  const [descExpanded, setDescExpanded] = useState(false);
+  const [descOverflows, setDescOverflows] = useState(false);
+  const descRef = useRef(null);
+
+  // Measured once per product, while the paragraph is still in its clamped
+  // (2-line) state — tells us whether "Show more" is actually needed, rather
+  // than guessing from a character count that breaks at different widths.
+  useLayoutEffect(() => {
+    if (descRef.current) {
+      setDescOverflows(descRef.current.scrollHeight > descRef.current.clientHeight + 1);
+    }
+    setDescExpanded(false);
+  }, [product.description]);
 
   const isWished = wishlist.includes(product.id);
 
@@ -596,9 +609,19 @@ function ProductModal({ product, onClose, onWishlist, wishlist, onAddToCart, onB
 
             <h2 className="modal-title">{product.name}</h2>
 
-            {/* Description — real backend field */}
+            {/* Description — real backend field. Clamped to 2 lines with a
+                Show more/less toggle so long descriptions don't dominate the page. */}
             {product.description && (
-              <p className="modal-description">{product.description}</p>
+              <div className="modal-description-wrap">
+                <p ref={descRef} className={`modal-description ${descExpanded ? "" : "clamped"}`}>
+                  {product.description}
+                </p>
+                {descOverflows && (
+                  <button type="button" className="desc-toggle" onClick={() => setDescExpanded(v => !v)}>
+                    {descExpanded ? "Show less ▲" : "Show more ▼"}
+                  </button>
+                )}
+              </div>
             )}
 
             {/* Rating */}

@@ -2406,15 +2406,41 @@ input, select { font-family: inherit; }
 }
 
 /* ─── Modal description ──────────────────────────────────────────────────────── */
-.modal-description {
-  font-size: 0.875rem;
-  color: var(--text-muted);
-  line-height: 1.65;
+/* Padding lives on the wrapper, not the clamped <p> itself — -webkit-line-clamp
+   combined with padding on the same element lets the next hidden line's text
+   bleed into the padding area in real Chromium (a known rendering quirk), so
+   the two responsibilities are split across parent/child to avoid it. */
+.modal-description-wrap {
+  margin-bottom: 4px;
   padding: 10px 14px;
   background: var(--surface2);
   border-radius: 8px;
   border-left: 3px solid var(--brand);
 }
+.modal-description {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  line-height: 1.65;
+  white-space: pre-line;
+}
+.modal-description.clamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: clip;
+}
+.desc-toggle {
+  display: block;
+  margin: 6px 0 0;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--brand);
+  cursor: pointer;
+}
+.desc-toggle:hover { text-decoration: underline; }
 
 /* ─── Size hint ──────────────────────────────────────────────────────────────── */
 .size-hint {
