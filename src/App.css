@@ -573,12 +573,14 @@ input, select { font-family: inherit; }
   background: linear-gradient(135deg, #0d0d14 0%, #1a1a2e 50%, #2d1b4e 100%);
   border-radius: 20px;
   padding: 48px 56px;
+  min-height: 220px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 32px;
+  justify-content: flex-start;
   overflow: hidden;
   position: relative;
+  background-size: cover;
+  background-position: center;
 }
 .promo-banner::before {
   content: '';
@@ -590,39 +592,9 @@ input, select { font-family: inherit; }
   border-radius: 50%;
   background: rgba(201,24,74,0.15);
 }
-.promo-text .promo-eyebrow {
-  font-size: 0.8rem;
-  letter-spacing: 0.12em;
-  color: var(--gold);
-  text-transform: uppercase;
-  font-weight: 600;
-  margin-bottom: 10px;
-}
-.promo-text h2 {
-  font-family: 'Playfair Display', serif;
-  font-size: 2rem;
-  color: #fff;
-  margin-bottom: 10px;
-}
-.promo-text p { color: rgba(255,255,255,0.65); margin-bottom: 24px; }
-.promo-badges { display: flex; gap: 16px; align-items: center; flex-shrink: 0; z-index: 1; }
-.promo-badge {
-  width: 90px; height: 90px;
-  border-radius: 50%;
-  background: var(--brand);
-  color: #fff;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.6rem;
-  font-weight: 800;
-  text-align: center;
-  line-height: 1.1;
-  box-shadow: 0 8px 30px rgba(201,24,74,0.5);
-}
-.promo-badge.sm { width: 70px; height: 70px; font-size: 1rem; background: var(--gold); color: var(--dark); }
-.promo-badge small { font-size: 0.65rem; font-weight: 600; opacity: 0.9; }
+/* A custom-designed banner image already carries its own visual composition —
+   the default decorative glow would just clash with whatever the admin made. */
+.promo-banner.has-image::before { display: none; }
 
 /* ─── Collection Page ────────────────────────────────────────────────────────── */
 .collection-page {
@@ -1550,8 +1522,7 @@ input, select { font-family: inherit; }
 @media (max-width: 600px) {
   .vouchers { grid-template-columns: 1fr 1fr; gap: 10px; padding: 20px; }
   .category-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
-  .promo-banner { flex-direction: column; text-align: center; }
-  .promo-badges { justify-content: center; }
+  .promo-banner { justify-content: center; text-align: center; }
   .hero-headline { font-size: 1.8rem; }
   .navbar { padding: 0 16px; gap: 12px; }
   .brand-text { font-size: 0.95rem; }

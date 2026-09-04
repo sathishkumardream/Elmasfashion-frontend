@@ -195,12 +195,15 @@ const NAV_LINKS = [
 // Shared helper: resolves an admin-set background override (image or color)
 // against a component's own default background. Used by hero slides and the
 // promo/announcement banner — both follow the same "override just the
-// background, keep the hardcoded text" pattern. Image overrides get a dark
-// overlay layered on top so existing white text stays readable over a photo.
-function resolveBackgroundOverride(defaultBg, override) {
+// background" pattern. `useOverlay` layers a dark gradient behind an image
+// override so light-colored text stays readable — the hero slides need this
+// (their headline/sub text is hardcoded on top), but the promo banner doesn't
+// since it has no text of its own anymore (admin designs that into the image).
+function resolveBackgroundOverride(defaultBg, override, useOverlay = true) {
   if (!override) return defaultBg;
   if (override.backgroundType === "image" && override.backgroundImage) {
-    return `linear-gradient(rgba(10,14,30,0.55),rgba(10,14,30,0.55)), url("${override.backgroundImage}") center/cover no-repeat`;
+    const overlay = useOverlay ? `linear-gradient(rgba(10,14,30,0.55),rgba(10,14,30,0.55)), ` : "";
+    return `${overlay}url("${override.backgroundImage}") center/cover no-repeat`;
   }
   if (override.backgroundType === "color" && override.backgroundColor) {
     return override.backgroundColor;
@@ -3332,17 +3335,13 @@ export default function App() {
             )}
           </section>
 
-          <section className="promo-banner" style={{ background: resolveBackgroundOverride(DEFAULT_PROMO_BG, promoBanner) }}>
-            <div className="promo-text">
-              <p className="promo-eyebrow">Limited Time</p>
-              <h2>End of Season Sale</h2>
-              <p>Up to 50% OFF on selected items across all categories</p>
-              <button className="cta-primary" onClick={()=>navigateTo("collection")}>Shop Sale</button>
-            </div>
-            <div className="promo-badges">
-              <div className="promo-badge">50%<br/><small>OFF</small></div>
-              <div className="promo-badge sm">Free<br/>Ship</div>
-            </div>
+          {/* Text/badges are intentionally not here — admin designs those directly
+              into the uploaded banner image. Only the CTA is hardcoded. */}
+          <section
+            className={`promo-banner ${promoBanner?.backgroundType === "image" ? "has-image" : ""}`}
+            style={{ background: resolveBackgroundOverride(DEFAULT_PROMO_BG, promoBanner, false) }}
+          >
+            <button className="cta-primary" onClick={()=>navigateTo("collection")}>Shop Sale</button>
           </section>
 
           {/* New Arrivals */}

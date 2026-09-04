@@ -1627,7 +1627,7 @@ function CategoryImagesManager({ token }) {
 // banner manager below. Text/headline content is passed in as previewContent
 // and is never editable here — only the background.
 // ─────────────────────────────────────────────────────────────────────────────
-function BackgroundEditorCard({ title, subtitle, initial, onSave, previewContent }) {
+function BackgroundEditorCard({ title, subtitle, initial, onSave, previewContent, useOverlay = true }) {
   const [backgroundType, setBackgroundType] = useState(initial.backgroundType || "default");
   const [backgroundImage, setBackgroundImage] = useState(initial.backgroundImage || "");
   const [backgroundColor, setBackgroundColor] = useState(initial.backgroundColor || "#1a1a2e");
@@ -1653,7 +1653,7 @@ function BackgroundEditorCard({ title, subtitle, initial, onSave, previewContent
 
   const previewBg =
     backgroundType === "image" && backgroundImage
-      ? `linear-gradient(rgba(10,14,30,0.55),rgba(10,14,30,0.55)), url("${backgroundImage}") center/cover no-repeat`
+      ? `${useOverlay ? "linear-gradient(rgba(10,14,30,0.55),rgba(10,14,30,0.55)), " : ""}url("${backgroundImage}") center/cover no-repeat`
       : backgroundType === "color" && backgroundColor
       ? backgroundColor
       : initial.defaultPreviewBg;
@@ -1802,24 +1802,30 @@ function PromoBannerManager({ token }) {
     <div>
       <h1 className="admin-page-title">Announcement Banner</h1>
       <p className="admin-page-sub">
-        Customize the background of the "End of Season Sale" banner on the homepage. Text and badges stay the same.
+        Customize the background of the homepage announcement banner. There's no headline or badge text here anymore —
+        design that directly into your image. Only the "Shop Sale" button is rendered on top.
       </p>
 
       <BackgroundEditorCard
         title="Background"
+        useOverlay={false}
         initial={{ ...data, defaultPreviewBg: "linear-gradient(135deg, #0d0d14 0%, #1a1a2e 50%, #2d1b4e 100%)" }}
         onSave={(body) => apiFetch("/promo-banner", { method: "PUT", token, body })}
         previewContent={
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", gap: 16, flexWrap: "wrap" }}>
-            <div>
-              <p style={{ color: "#f5a623", fontWeight: 700, fontSize: "0.7rem", letterSpacing: "0.1em", margin: "0 0 6px", textTransform: "uppercase" }}>Limited Time</p>
-              <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: "1.4rem", margin: "0 0 6px" }}>End of Season Sale</h2>
-              <p style={{ fontSize: "0.8rem", opacity: 0.85, margin: 0 }}>Up to 50% OFF on selected items across all categories</p>
-            </div>
-            <div style={{ width: 64, height: 64, borderRadius: "50%", background: "#c9184a", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.8rem", fontWeight: 700, textAlign: "center", flexShrink: 0, lineHeight: 1.1 }}>
-              50%<br/><span style={{ fontSize: "0.6rem" }}>OFF</span>
-            </div>
-          </div>
+          <button
+            style={{
+              background: "var(--brand, #c9184a)",
+              color: "#fff",
+              border: "none",
+              borderRadius: 8,
+              padding: "12px 28px",
+              fontWeight: 700,
+              fontSize: "0.9rem",
+              cursor: "default",
+            }}
+          >
+            Shop Sale
+          </button>
         }
       />
     </div>
