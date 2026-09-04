@@ -1515,6 +1515,7 @@ const NAV_ITEMS = [
   { key: "promotions", label: "Promotions", icon: "🏷️" },
   { key: "madeforyou", label: "Made For You", icon: "🧵" },
   { key: "herobanner", label: "Hero Banner", icon: "🖼️" },
+  { key: "promobanner", label: "Announcement Banner", icon: "📣" },
   { key: "categoryimages", label: "Category Images", icon: "🗂️" },
 ];
 
@@ -1621,31 +1622,18 @@ function CategoryImagesManager({ token }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HERO BANNER MANAGER — overrides only the background of the storefront's
-// first hero slide. Headline/subtext/CTA are not editable here; they stay
-// hardcoded in the storefront so this can't accidentally break their wording.
+// BACKGROUND EDITOR CARD — reusable background-only editor (default/image/color
+// + live preview + save), shared by the hero slides manager and the promo
+// banner manager below. Text/headline content is passed in as previewContent
+// and is never editable here — only the background.
 // ─────────────────────────────────────────────────────────────────────────────
-const DEFAULT_HERO_PREVIEW_BG = "linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%)";
-
-function HeroBannerManager({ token }) {
-  const [backgroundType, setBackgroundType] = useState("default");
-  const [backgroundImage, setBackgroundImage] = useState("");
-  const [backgroundColor, setBackgroundColor] = useState("#1a1a2e");
-  const [loading, setLoading] = useState(true);
+function BackgroundEditorCard({ title, subtitle, initial, onSave, previewContent }) {
+  const [backgroundType, setBackgroundType] = useState(initial.backgroundType || "default");
+  const [backgroundImage, setBackgroundImage] = useState(initial.backgroundImage || "");
+  const [backgroundColor, setBackgroundColor] = useState(initial.backgroundColor || "#1a1a2e");
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    apiFetch("/hero-banner")
-      .then((s) => {
-        setBackgroundType(s.backgroundType || "default");
-        if (s.backgroundImage) setBackgroundImage(s.backgroundImage);
-        if (s.backgroundColor) setBackgroundColor(s.backgroundColor);
-      })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, []);
+  const [error, setError] = useState("");
 
   const handleSave = async () => {
     setSaving(true); setError(""); setSaved(false);
@@ -1653,7 +1641,7 @@ function HeroBannerManager({ token }) {
       const body = { backgroundType };
       if (backgroundType === "image") body.backgroundImage = backgroundImage;
       if (backgroundType === "color") body.backgroundColor = backgroundColor;
-      await apiFetch("/hero-banner", { method: "PUT", token, body });
+      await onSave(body);
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (e) {
@@ -1663,95 +1651,177 @@ function HeroBannerManager({ token }) {
     }
   };
 
-  if (loading) return <div className="admin-loading">Loading…</div>;
-
   const previewBg =
     backgroundType === "image" && backgroundImage
       ? `linear-gradient(rgba(10,14,30,0.55),rgba(10,14,30,0.55)), url("${backgroundImage}") center/cover no-repeat`
       : backgroundType === "color" && backgroundColor
       ? backgroundColor
-      : DEFAULT_HERO_PREVIEW_BG;
+      : initial.defaultPreviewBg;
 
   const canSave = backgroundType === "default"
     || (backgroundType === "image" && backgroundImage.trim())
     || (backgroundType === "color" && backgroundColor.trim());
 
   return (
-    <div>
-      <h1 className="admin-page-title">Hero Banner</h1>
-      <p className="admin-page-sub">Customize the background of the homepage's first banner slide</p>
+    <div className="admin-panel" style={{ marginBottom: 18 }}>
+      <h3 className="admin-panel-title">{title}</h3>
+      {subtitle && <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: 14 }}>{subtitle}</p>}
+      {error && <div className="admin-form-error">⚠️ {error}</div>}
 
-      <div className="admin-panel">
-        <h3 className="admin-panel-title">Background</h3>
-        <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: 14 }}>
-          Only the background can be changed here — the headline, subtext, and buttons stay the same.
-          The other two rotating slides (Women's Exclusive Edit, Men's Essentials) aren't affected.
-        </p>
-        {error && <div className="admin-form-error">⚠️ {error}</div>}
+      <div className="admin-form-row">
+        <label>Background Source</label>
+        <select value={backgroundType} onChange={(e) => setBackgroundType(e.target.value)}>
+          <option value="default">Default (built-in gradient)</option>
+          <option value="image">Image</option>
+          <option value="color">Solid color / gradient</option>
+        </select>
+      </div>
 
+      {backgroundType === "image" && (
         <div className="admin-form-row">
-          <label>Background Source</label>
-          <select value={backgroundType} onChange={(e) => setBackgroundType(e.target.value)}>
-            <option value="default">Default (built-in gradient)</option>
-            <option value="image">Image</option>
-            <option value="color">Solid color / gradient</option>
-          </select>
+          <label>Image</label>
+          <ImageUploader value={backgroundImage} onChange={setBackgroundImage} />
         </div>
+      )}
 
-        {backgroundType === "image" && (
-          <div className="admin-form-row">
-            <label>Banner Image</label>
-            <ImageUploader value={backgroundImage} onChange={setBackgroundImage} />
-          </div>
-        )}
-
-        {backgroundType === "color" && (
-          <div className="admin-form-row" style={{ maxWidth: 320 }}>
-            <label>Color or CSS gradient</label>
-            <input
-              type="text"
-              value={backgroundColor}
-              onChange={(e) => setBackgroundColor(e.target.value)}
-              placeholder="#1a1a2e or linear-gradient(...)"
-            />
-            <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: 4 }}>
-              Accepts any CSS color (e.g. <code>#c9184a</code>) or a full gradient (e.g. <code>linear-gradient(135deg,#1a1a2e,#0f3460)</code>).
-            </p>
-          </div>
-        )}
-
-        <div className="admin-form-row">
-          <label>Preview</label>
-          <div
-            style={{
-              background: previewBg,
-              borderRadius: 12,
-              padding: "40px 28px",
-              color: "#fff",
-              minHeight: 140,
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "center",
-            }}
-          >
-            <p style={{ color: "#f5a623", fontWeight: 700, fontSize: "0.75rem", letterSpacing: "0.08em", margin: "0 0 8px" }}>
-              ✦ SEASON'S BEST ✦
-            </p>
-            <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: "1.8rem", margin: "0 0 8px" }}>
-              New Season Arrivals
-            </h2>
-            <p style={{ fontSize: "0.85rem", opacity: 0.85, margin: 0 }}>
-              Discover the latest in fashion — curated just for you
-            </p>
-          </div>
+      {backgroundType === "color" && (
+        <div className="admin-form-row" style={{ maxWidth: 320 }}>
+          <label>Color or CSS gradient</label>
+          <input
+            type="text"
+            value={backgroundColor}
+            onChange={(e) => setBackgroundColor(e.target.value)}
+            placeholder="#1a1a2e or linear-gradient(...)"
+          />
+          <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: 4 }}>
+            Accepts any CSS color (e.g. <code>#c9184a</code>) or a full gradient (e.g. <code>linear-gradient(135deg,#1a1a2e,#0f3460)</code>).
+          </p>
         </div>
+      )}
 
-        <div className="admin-form-actions" style={{ justifyContent: "flex-start", marginTop: 18 }}>
-          <button className="admin-btn admin-btn-primary" disabled={saving || !canSave} onClick={handleSave}>
-            {saving ? "Saving…" : saved ? "✓ Saved" : "Save Banner"}
-          </button>
+      <div className="admin-form-row">
+        <label>Preview</label>
+        <div
+          style={{
+            background: previewBg,
+            borderRadius: 12,
+            padding: "32px 28px",
+            color: "#fff",
+            minHeight: 130,
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            overflow: "hidden",
+          }}
+        >
+          {previewContent}
         </div>
       </div>
+
+      <div className="admin-form-actions" style={{ justifyContent: "flex-start", marginTop: 18 }}>
+        <button className="admin-btn admin-btn-primary" disabled={saving || !canSave} onClick={handleSave}>
+          {saving ? "Saving…" : saved ? "✓ Saved" : "Save"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HERO SLIDES MANAGER — overrides only the background of each of the storefront's
+// 3 rotating hero slides. Headline/subtext/CTA are not editable here; they stay
+// hardcoded in the storefront so this can't accidentally break their wording.
+// ─────────────────────────────────────────────────────────────────────────────
+const HERO_SLIDE_ADMIN_DEFS = [
+  { key: "slide1", label: "Slide 1 — New Season Arrivals", defaultPreviewBg: "linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%)", eyebrow: "✦ SEASON'S BEST ✦", headline: "New Season Arrivals", sub: "Discover the latest in fashion — curated just for you" },
+  { key: "slide2", label: "Slide 2 — Women's Exclusive Edit", defaultPreviewBg: "linear-gradient(135deg,#2d1b4e 0%,#6b2fa0 50%,#a855f7 100%)", eyebrow: null, headline: "Women's Exclusive Edit", sub: "Elevate your style with our premium women's collection" },
+  { key: "slide3", label: "Slide 3 — Men's Essentials", defaultPreviewBg: "linear-gradient(135deg,#0d2137 0%,#1a4b6e 50%,#2980b9 100%)", eyebrow: null, headline: "Men's Essentials", sub: "Smart, sharp, and effortlessly styled" },
+];
+
+function HeroSlidesManager({ token }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    apiFetch("/hero-banner")
+      .then(setData)
+      .catch((e) => setError(e.message));
+  }, []);
+
+  if (error) return <div className="admin-form-error">⚠️ {error}</div>;
+  if (!data) return <div className="admin-loading">Loading…</div>;
+
+  return (
+    <div>
+      <h1 className="admin-page-title">Hero Banner</h1>
+      <p className="admin-page-sub">
+        Customize the background of each homepage carousel slide individually — headline, subtext, and buttons stay the same for all three.
+      </p>
+
+      {HERO_SLIDE_ADMIN_DEFS.map((slide) => (
+        <BackgroundEditorCard
+          key={slide.key}
+          title={slide.label}
+          initial={{ ...data[slide.key], defaultPreviewBg: slide.defaultPreviewBg }}
+          onSave={(body) => apiFetch(`/hero-banner/${slide.key}`, { method: "PUT", token, body })}
+          previewContent={
+            <>
+              {slide.eyebrow && (
+                <p style={{ color: "#f5a623", fontWeight: 700, fontSize: "0.75rem", letterSpacing: "0.08em", margin: "0 0 8px" }}>
+                  {slide.eyebrow}
+                </p>
+              )}
+              <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: "1.6rem", margin: "0 0 8px" }}>{slide.headline}</h2>
+              <p style={{ fontSize: "0.85rem", opacity: 0.85, margin: 0 }}>{slide.sub}</p>
+            </>
+          }
+        />
+      ))}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PROMO BANNER MANAGER — overrides only the background of the "End of Season
+// Sale" style announcement banner. Text/badges/CTA stay hardcoded.
+// ─────────────────────────────────────────────────────────────────────────────
+function PromoBannerManager({ token }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    apiFetch("/promo-banner")
+      .then(setData)
+      .catch((e) => setError(e.message));
+  }, []);
+
+  if (error) return <div className="admin-form-error">⚠️ {error}</div>;
+  if (!data) return <div className="admin-loading">Loading…</div>;
+
+  return (
+    <div>
+      <h1 className="admin-page-title">Announcement Banner</h1>
+      <p className="admin-page-sub">
+        Customize the background of the "End of Season Sale" banner on the homepage. Text and badges stay the same.
+      </p>
+
+      <BackgroundEditorCard
+        title="Background"
+        initial={{ ...data, defaultPreviewBg: "linear-gradient(135deg, #0d0d14 0%, #1a1a2e 50%, #2d1b4e 100%)" }}
+        onSave={(body) => apiFetch("/promo-banner", { method: "PUT", token, body })}
+        previewContent={
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", gap: 16, flexWrap: "wrap" }}>
+            <div>
+              <p style={{ color: "#f5a623", fontWeight: 700, fontSize: "0.7rem", letterSpacing: "0.1em", margin: "0 0 6px", textTransform: "uppercase" }}>Limited Time</p>
+              <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: "1.4rem", margin: "0 0 6px" }}>End of Season Sale</h2>
+              <p style={{ fontSize: "0.8rem", opacity: 0.85, margin: 0 }}>Up to 50% OFF on selected items across all categories</p>
+            </div>
+            <div style={{ width: 64, height: 64, borderRadius: "50%", background: "#c9184a", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.8rem", fontWeight: 700, textAlign: "center", flexShrink: 0, lineHeight: 1.1 }}>
+              50%<br/><span style={{ fontSize: "0.6rem" }}>OFF</span>
+            </div>
+          </div>
+        }
+      />
     </div>
   );
 }
@@ -1800,7 +1870,8 @@ export default function AdminApp() {
           {tab === "orders" && <OrdersManager token={admin.token} />}
           {tab === "promotions" && <PromotionsManager token={admin.token} />}
           {tab === "madeforyou" && <MadeForYouManager token={admin.token} />}
-          {tab === "herobanner" && <HeroBannerManager token={admin.token} />}
+          {tab === "herobanner" && <HeroSlidesManager token={admin.token} />}
+          {tab === "promobanner" && <PromoBannerManager token={admin.token} />}
           {tab === "categoryimages" && <CategoryImagesManager token={admin.token} />}
         </main>
       </div>

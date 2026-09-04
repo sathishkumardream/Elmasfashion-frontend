@@ -192,6 +192,30 @@ const NAV_LINKS = [
 // Promotion records only store type/value/minOrderValue — the storefront derives
 // a human-readable title/sub/icon from those so the voucher cards stay readable
 // no matter what an admin creates.
+// Shared helper: resolves an admin-set background override (image or color)
+// against a component's own default background. Used by hero slides and the
+// promo/announcement banner — both follow the same "override just the
+// background, keep the hardcoded text" pattern. Image overrides get a dark
+// overlay layered on top so existing white text stays readable over a photo.
+function resolveBackgroundOverride(defaultBg, override) {
+  if (!override) return defaultBg;
+  if (override.backgroundType === "image" && override.backgroundImage) {
+    return `linear-gradient(rgba(10,14,30,0.55),rgba(10,14,30,0.55)), url("${override.backgroundImage}") center/cover no-repeat`;
+  }
+  if (override.backgroundType === "color" && override.backgroundColor) {
+    return override.backgroundColor;
+  }
+  return defaultBg;
+}
+
+const HERO_SLIDE_DEFAULTS = [
+  { key:"slide1", bg:"linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%)", headline:"New Season Arrivals", sub:"Discover the latest in fashion — curated just for you", cta:"Shop Now" },
+  { key:"slide2", bg:"linear-gradient(135deg,#2d1b4e 0%,#6b2fa0 50%,#a855f7 100%)", headline:"Women's Exclusive Edit", sub:"Elevate your style with our premium women's collection", cta:"Explore Women's" },
+  { key:"slide3", bg:"linear-gradient(135deg,#0d2137 0%,#1a4b6e 50%,#2980b9 100%)", headline:"Men's Essentials", sub:"Smart, sharp, and effortlessly styled", cta:"Shop Men's" },
+];
+
+const DEFAULT_PROMO_BG = "linear-gradient(135deg, #0d0d14 0%, #1a1a2e 50%, #2d1b4e 100%)";
+
 const VOUCHER_ICONS = { PERCENT: "🎯", FLAT: "💰", SHIPPING: "🚚" };
 const voucherDisplay = (p) => {
   const icon = VOUCHER_ICONS[p.type] || "🏷️";
@@ -2901,11 +2925,19 @@ export default function App() {
 
   // ── Hero ──
   const [heroSlide, setHeroSlide] = useState(0);
-  const [heroBanner, setHeroBanner] = useState(null); // admin-set background override for slide 1
+  const [heroSlideBackgrounds, setHeroSlideBackgrounds] = useState({}); // admin-set background overrides, keyed by slide1/slide2/slide3
   useEffect(() => {
     fetch(`${API_BASE}/hero-banner`)
-      .then(res => res.json()).then(setHeroBanner)
-      .catch(() => setHeroBanner(null)); // fetch failure just falls back to the default gradient
+      .then(res => res.json()).then(setHeroSlideBackgrounds)
+      .catch(() => setHeroSlideBackgrounds({})); // fetch failure just falls back to each slide's default gradient
+  }, []);
+
+  // ── Promo / announcement banner ──
+  const [promoBanner, setPromoBanner] = useState(null);
+  useEffect(() => {
+    fetch(`${API_BASE}/promo-banner`)
+      .then(res => res.json()).then(setPromoBanner)
+      .catch(() => setPromoBanner(null)); // fetch failure just falls back to the default gradient
   }, []);
 
   // ── Vouchers (real, admin-created promotions) ──
@@ -2967,21 +2999,10 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, products]);
 
-  const DEFAULT_HERO_BG = "linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%)";
-  // Admin can only override slide 1's background — headline/sub/CTA stay as-is either way.
-  // An image background gets a dark overlay layered on top so the existing white text stays readable.
-  const heroSlide1Bg =
-    heroBanner?.backgroundType === "image" && heroBanner.backgroundImage
-      ? `linear-gradient(rgba(10,14,30,0.55),rgba(10,14,30,0.55)), url("${heroBanner.backgroundImage}") center/cover no-repeat`
-      : heroBanner?.backgroundType === "color" && heroBanner.backgroundColor
-      ? heroBanner.backgroundColor
-      : DEFAULT_HERO_BG;
-
-  const heroSlides = [
-    { bg:heroSlide1Bg, headline:"New Season Arrivals", sub:"Discover the latest in fashion — curated just for you", cta:"Shop Now" },
-    { bg:"linear-gradient(135deg,#2d1b4e 0%,#6b2fa0 50%,#a855f7 100%)", headline:"Women's Exclusive Edit", sub:"Elevate your style with our premium women's collection", cta:"Explore Women's" },
-    { bg:"linear-gradient(135deg,#0d2137 0%,#1a4b6e 50%,#2980b9 100%)", headline:"Men's Essentials", sub:"Smart, sharp, and effortlessly styled", cta:"Shop Men's" },
-  ];
+  const heroSlides = HERO_SLIDE_DEFAULTS.map(s => ({
+    ...s,
+    bg: resolveBackgroundOverride(s.bg, heroSlideBackgrounds[s.key]),
+  }));
 
   useEffect(()=>{ const t=setInterval(()=>setHeroSlide(s=>(s+1)%heroSlides.length),4500); return()=>clearInterval(t); },[heroSlides.length]);
   useEffect(()=>{ const h=()=>{ setOpenDropdown(null); setUserDropOpen(false); }; document.addEventListener("click",h); return()=>document.removeEventListener("click",h); },[]);
@@ -3311,7 +3332,7 @@ export default function App() {
             )}
           </section>
 
-          <section className="promo-banner">
+          <section className="promo-banner" style={{ background: resolveBackgroundOverride(DEFAULT_PROMO_BG, promoBanner) }}>
             <div className="promo-text">
               <p className="promo-eyebrow">Limited Time</p>
               <h2>End of Season Sale</h2>
