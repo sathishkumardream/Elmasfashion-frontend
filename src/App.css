@@ -573,7 +573,7 @@ input, select { font-family: inherit; }
   background: linear-gradient(135deg, #0d0d14 0%, #1a1a2e 50%, #2d1b4e 100%);
   border-radius: 20px;
   padding: 48px 56px;
-  min-height: 220px;
+  aspect-ratio: 4 / 1;
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -1522,7 +1522,7 @@ input, select { font-family: inherit; }
 @media (max-width: 600px) {
   .vouchers { grid-template-columns: 1fr 1fr; gap: 10px; padding: 20px; }
   .category-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
-  .promo-banner { justify-content: center; text-align: center; }
+  .promo-banner { justify-content: center; text-align: center; aspect-ratio: 2 / 1; }
   .hero-headline { font-size: 1.8rem; }
   .navbar { padding: 0 16px; gap: 12px; }
   .brand-text { font-size: 0.95rem; }

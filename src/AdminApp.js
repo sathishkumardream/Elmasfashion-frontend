@@ -53,7 +53,7 @@ async function apiFetch(path, { method = "GET", body, token } = {}) {
 // multi=true: manages an array of URLs (product gallery) with add/remove/reorder-by-drag omitted for simplicity.
 // multi=false: manages a single URL (variant image).
 // ─────────────────────────────────────────────────────────────────────────────
-function ImageUploader({ multi = false, value, onChange }) {
+function ImageUploader({ multi = false, value, onChange, hint }) {
   const [urlInput, setUrlInput] = useState("");
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
@@ -124,6 +124,7 @@ function ImageUploader({ multi = false, value, onChange }) {
         )}
       </div>
       {error && <p className="admin-form-error" style={{ marginTop: 6 }}>⚠️ {error}</p>}
+      {hint && <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 4 }}>{hint}</p>}
       {!CLOUDINARY_CONFIGURED && (
         <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 4 }}>
           File upload isn't set up yet — paste an image URL for now, or ask about enabling direct upload.
@@ -1627,7 +1628,7 @@ function CategoryImagesManager({ token }) {
 // banner manager below. Text/headline content is passed in as previewContent
 // and is never editable here — only the background.
 // ─────────────────────────────────────────────────────────────────────────────
-function BackgroundEditorCard({ title, subtitle, initial, onSave, previewContent, useOverlay = true }) {
+function BackgroundEditorCard({ title, subtitle, initial, onSave, previewContent, useOverlay = true, imageHint, previewAspectRatio }) {
   const [backgroundType, setBackgroundType] = useState(initial.backgroundType || "default");
   const [backgroundImage, setBackgroundImage] = useState(initial.backgroundImage || "");
   const [backgroundColor, setBackgroundColor] = useState(initial.backgroundColor || "#1a1a2e");
@@ -1680,7 +1681,7 @@ function BackgroundEditorCard({ title, subtitle, initial, onSave, previewContent
       {backgroundType === "image" && (
         <div className="admin-form-row">
           <label>Image</label>
-          <ImageUploader value={backgroundImage} onChange={setBackgroundImage} />
+          <ImageUploader value={backgroundImage} onChange={setBackgroundImage} hint={imageHint} />
         </div>
       )}
 
@@ -1707,7 +1708,8 @@ function BackgroundEditorCard({ title, subtitle, initial, onSave, previewContent
             borderRadius: 12,
             padding: "32px 28px",
             color: "#fff",
-            minHeight: 130,
+            minHeight: previewAspectRatio ? undefined : 130,
+            aspectRatio: previewAspectRatio || undefined,
             display: "flex",
             flexDirection: "column",
             justifyContent: "center",
@@ -1809,6 +1811,8 @@ function PromoBannerManager({ token }) {
       <BackgroundEditorCard
         title="Background"
         useOverlay={false}
+        previewAspectRatio="4 / 1"
+        imageHint="Recommended image ratio: 4:1 (e.g. 1600×400px) — the banner is wide and short, so tall or square photos will get heavily cropped."
         initial={{ ...data, defaultPreviewBg: "linear-gradient(135deg, #0d0d14 0%, #1a1a2e 50%, #2d1b4e 100%)" }}
         onSave={(body) => apiFetch("/promo-banner", { method: "PUT", token, body })}
         previewContent={
