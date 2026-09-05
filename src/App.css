@@ -592,9 +592,29 @@ input, select { font-family: inherit; }
   border-radius: 50%;
   background: rgba(201,24,74,0.15);
 }
-/* A custom-designed banner image already carries its own visual composition —
-   the default decorative glow would just clash with whatever the admin made. */
+/* Image mode shows the admin's design uncropped: no fixed aspect-ratio (the
+   image's own ratio decides the banner's height), no padding (the image fills
+   edge-to-edge), and no decorative glow (it would clash with a real photo).
+   The CTA sits in its own bar below the image rather than floating on top of
+   it — an overlaid button risks colliding with whatever the admin placed near
+   the image's edges (text, icons, etc.), which a footer bar never can. */
+.promo-banner.has-image {
+  aspect-ratio: unset;
+  padding: 0;
+  display: block;
+}
 .promo-banner.has-image::before { display: none; }
+.promo-banner-img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.promo-cta-bar {
+  padding: 18px 32px;
+  background: #14141f;
+  display: flex;
+  justify-content: flex-start;
+}
 
 /* ─── Collection Page ────────────────────────────────────────────────────────── */
 .collection-page {
@@ -1523,6 +1543,7 @@ input, select { font-family: inherit; }
   .vouchers { grid-template-columns: 1fr 1fr; gap: 10px; padding: 20px; }
   .category-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
   .promo-banner { justify-content: center; text-align: center; aspect-ratio: 2 / 1; }
+  .promo-cta-bar { padding: 14px 20px; justify-content: center; }
   .hero-headline { font-size: 1.8rem; }
   .navbar { padding: 0 16px; gap: 12px; }
   .brand-text { font-size: 0.95rem; }

@@ -208,6 +208,18 @@ function cloudinaryFit(url, ratio, targetWidth = 1200) {
   return url.replace("/upload/", `/upload/c_fill,g_auto,ar_${ratio},w_${targetWidth},q_auto,f_auto/`);
 }
 
+// For a fully-designed graphic (like the announcement banner, which has no
+// separately-rendered text of its own — the admin bakes headline/offer/dates
+// straight into the image) cropping is actively harmful: it can chop off
+// content the crop algorithm has no way of knowing is important, like a date
+// range printed at the bottom of the image. This variant only resizes/
+// compresses for delivery — it never crops, so the full image is always shown
+// at its own natural ratio, whatever that is.
+function cloudinaryOptimize(url, targetWidth = 1600) {
+  if (!url || !url.includes("res.cloudinary.com") || !url.includes("/upload/")) return url;
+  return url.replace("/upload/", `/upload/c_scale,w_${targetWidth},q_auto,f_auto/`);
+}
+
 // Shared helper: resolves an admin-set background override (image or color)
 // against a component's own default background. Used by hero slides and the
 // promo/announcement banner — both follow the same "override just the
@@ -3355,13 +3367,22 @@ export default function App() {
           </section>
 
           {/* Text/badges are intentionally not here — admin designs those directly
-              into the uploaded banner image. Only the CTA is hardcoded. */}
-          <section
-            className={`promo-banner ${promoBanner?.backgroundType === "image" ? "has-image" : ""}`}
-            style={{ background: resolveBackgroundOverride(DEFAULT_PROMO_BG, promoBanner, { useOverlay: false, ratio: "4:1", width: 1600 }) }}
-          >
-            <button className="cta-primary" onClick={()=>navigateTo("collection")}>Shop Sale</button>
-          </section>
+              into the uploaded banner image. Only the CTA is hardcoded.
+              Image mode renders the full image uncropped (its own natural ratio
+              decides the banner's height) since cropping could hide content the
+              admin baked into the design, like an offer's date range. */}
+          {promoBanner?.backgroundType === "image" && promoBanner.backgroundImage ? (
+            <section className="promo-banner has-image">
+              <img className="promo-banner-img" src={cloudinaryOptimize(promoBanner.backgroundImage, 1600)} alt="" />
+              <div className="promo-cta-bar">
+                <button className="cta-primary" onClick={()=>navigateTo("collection")}>Shop Sale</button>
+              </div>
+            </section>
+          ) : (
+            <section className="promo-banner" style={{ background: resolveBackgroundOverride(DEFAULT_PROMO_BG, promoBanner) }}>
+              <button className="cta-primary" onClick={()=>navigateTo("collection")}>Shop Sale</button>
+            </section>
+          )}
 
           {/* New Arrivals */}
           <section className="section">

@@ -19,6 +19,14 @@ function cloudinaryFit(url, ratio, targetWidth = 1200) {
   return url.replace("/upload/", `/upload/c_fill,g_auto,ar_${ratio},w_${targetWidth},q_auto,f_auto/`);
 }
 
+// Resize/compress only, never crop — for fully-designed graphics (like the
+// announcement banner) where cropping could hide content baked into the
+// image itself. See the App.js copy for the full rationale.
+function cloudinaryOptimize(url, targetWidth = 1200) {
+  if (!url || !url.includes("res.cloudinary.com") || !url.includes("/upload/")) return url;
+  return url.replace("/upload/", `/upload/c_scale,w_${targetWidth},q_auto,f_auto/`);
+}
+
 async function uploadImageToCloudinary(file) {
   const formData = new FormData();
   formData.append("file", file);
@@ -1640,7 +1648,7 @@ function CategoryImagesManager({ token }) {
 // banner manager below. Text/headline content is passed in as previewContent
 // and is never editable here — only the background.
 // ─────────────────────────────────────────────────────────────────────────────
-function BackgroundEditorCard({ title, subtitle, initial, onSave, previewContent, useOverlay = true, imageHint, previewAspectRatio, fitRatio }) {
+function BackgroundEditorCard({ title, subtitle, initial, onSave, previewContent, useOverlay = true, imageHint, previewAspectRatio, fitRatio, previewMode = "cropped" }) {
   const [backgroundType, setBackgroundType] = useState(initial.backgroundType || "default");
   const [backgroundImage, setBackgroundImage] = useState(initial.backgroundImage || "");
   const [backgroundColor, setBackgroundColor] = useState(initial.backgroundColor || "#1a1a2e");
@@ -1714,22 +1722,34 @@ function BackgroundEditorCard({ title, subtitle, initial, onSave, previewContent
 
       <div className="admin-form-row">
         <label>Preview</label>
-        <div
-          style={{
-            background: previewBg,
-            borderRadius: 12,
-            padding: "32px 28px",
-            color: "#fff",
-            minHeight: previewAspectRatio ? undefined : 130,
-            aspectRatio: previewAspectRatio || undefined,
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "center",
-            overflow: "hidden",
-          }}
-        >
-          {previewContent}
-        </div>
+        {previewMode === "natural" && backgroundType === "image" && backgroundImage ? (
+          // Shows the full image uncropped, exactly like the live storefront —
+          // no forced ratio, since this mode is for designs where every pixel
+          // (like a printed date range) matters and cropping would hide it.
+          // CTA sits in a bar below the image, not overlaid, so it can never
+          // collide with whatever the admin placed near the image's edges.
+          <div style={{ borderRadius: 12, overflow: "hidden" }}>
+            <img src={cloudinaryOptimize(backgroundImage, 900)} alt="" style={{ display: "block", width: "100%", height: "auto" }} />
+            <div style={{ padding: "14px 20px", background: "#14141f", display: "flex" }}>{previewContent}</div>
+          </div>
+        ) : (
+          <div
+            style={{
+              background: previewBg,
+              borderRadius: 12,
+              padding: "32px 28px",
+              color: "#fff",
+              minHeight: previewAspectRatio ? undefined : 130,
+              aspectRatio: previewAspectRatio || undefined,
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+              overflow: "hidden",
+            }}
+          >
+            {previewContent}
+          </div>
+        )}
       </div>
 
       <div className="admin-form-actions" style={{ justifyContent: "flex-start", marginTop: 18 }}>
@@ -1825,9 +1845,8 @@ function PromoBannerManager({ token }) {
       <BackgroundEditorCard
         title="Background"
         useOverlay={false}
-        fitRatio="4:1"
-        previewAspectRatio="4 / 1"
-        imageHint="Images are automatically optimized and smart-cropped to fit this banner's wide 4:1 shape — any photo ratio works, no need to pre-crop. (Pasted external URLs use plain center-crop instead.)"
+        previewMode="natural"
+        imageHint="The full image is always shown uncropped — its own width/height ratio decides the banner's shape, so nothing you design (like text near the edges) gets cut off. Design at whatever size fits your content; roughly 1600px wide works well."
         initial={{ ...data, defaultPreviewBg: "linear-gradient(135deg, #0d0d14 0%, #1a1a2e 50%, #2d1b4e 100%)" }}
         onSave={(body) => apiFetch("/promo-banner", { method: "PUT", token, body })}
         previewContent={
