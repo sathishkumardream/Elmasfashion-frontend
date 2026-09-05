@@ -192,6 +192,22 @@ const NAV_LINKS = [
 // Promotion records only store type/value/minOrderValue — the storefront derives
 // a human-readable title/sub/icon from those so the voucher cards stay readable
 // no matter what an admin creates.
+// Admin-uploaded images can come in any raw ratio (a tall phone photo, a
+// square Instagram crop, a wide banner graphic, ...) and get displayed in a
+// fixed-shape slot (a 4:1 banner, a landscape category card). Plain CSS
+// `background-size:cover` just centers and chops off whatever doesn't fit,
+// which can crop out faces/subjects arbitrarily. When the image is hosted on
+// Cloudinary (which admin uploads always are), we ask Cloudinary to smart-crop
+// it to the exact target ratio using content-aware "gravity: auto" (it
+// detects the main subject — faces, people, focal object — and crops around
+// it), so the image is optimized for the slot regardless of its original
+// shape. Pasted external URLs (not Cloudinary-hosted) can't be transformed
+// this way, so they fall back to plain CSS cover/center as before.
+function cloudinaryFit(url, ratio, targetWidth = 1200) {
+  if (!url || !ratio || !url.includes("res.cloudinary.com") || !url.includes("/upload/")) return url;
+  return url.replace("/upload/", `/upload/c_fill,g_auto,ar_${ratio},w_${targetWidth},q_auto,f_auto/`);
+}
+
 // Shared helper: resolves an admin-set background override (image or color)
 // against a component's own default background. Used by hero slides and the
 // promo/announcement banner — both follow the same "override just the
@@ -199,11 +215,13 @@ const NAV_LINKS = [
 // override so light-colored text stays readable — the hero slides need this
 // (their headline/sub text is hardcoded on top), but the promo banner doesn't
 // since it has no text of its own anymore (admin designs that into the image).
-function resolveBackgroundOverride(defaultBg, override, useOverlay = true) {
+// `ratio`/`width` control the Cloudinary smart-crop fit — see cloudinaryFit above.
+function resolveBackgroundOverride(defaultBg, override, { useOverlay = true, ratio, width = 1400 } = {}) {
   if (!override) return defaultBg;
   if (override.backgroundType === "image" && override.backgroundImage) {
+    const fitted = cloudinaryFit(override.backgroundImage, ratio, width);
     const overlay = useOverlay ? `linear-gradient(rgba(10,14,30,0.55),rgba(10,14,30,0.55)), ` : "";
-    return `${overlay}url("${override.backgroundImage}") center/cover no-repeat`;
+    return `${overlay}url("${fitted}") center/cover no-repeat`;
   }
   if (override.backgroundType === "color" && override.backgroundColor) {
     return override.backgroundColor;
@@ -3004,7 +3022,7 @@ export default function App() {
 
   const heroSlides = HERO_SLIDE_DEFAULTS.map(s => ({
     ...s,
-    bg: resolveBackgroundOverride(s.bg, heroSlideBackgrounds[s.key]),
+    bg: resolveBackgroundOverride(s.bg, heroSlideBackgrounds[s.key], { ratio: "21:9", width: 1600 }),
   }));
 
   useEffect(()=>{ const t=setInterval(()=>setHeroSlide(s=>(s+1)%heroSlides.length),4500); return()=>clearInterval(t); },[heroSlides.length]);
@@ -3289,11 +3307,12 @@ export default function App() {
                 {key:"girls",label:"Girls",emoji:"👧",items:"90+ Styles",gradient:"linear-gradient(135deg,#7b0038,#c9184a,#ff4d6d)"},
               ].map(cat=>{
                 const img = categoryImages[cat.key];
+                const fittedImg = cloudinaryFit(img, "3:2", 700);
                 return (
                   <div
                     key={cat.key}
                     className={`cat-card ${img ? "has-image" : ""}`}
-                    style={img ? { backgroundImage: `url("${img}")` } : { background: cat.gradient }}
+                    style={img ? { backgroundImage: `url("${fittedImg}")` } : { background: cat.gradient }}
                     onClick={()=>navigateTo("collection",cat.key)}
                   >
                     {!img && <span className="cat-emoji">{cat.emoji}</span>}
@@ -3339,7 +3358,7 @@ export default function App() {
               into the uploaded banner image. Only the CTA is hardcoded. */}
           <section
             className={`promo-banner ${promoBanner?.backgroundType === "image" ? "has-image" : ""}`}
-            style={{ background: resolveBackgroundOverride(DEFAULT_PROMO_BG, promoBanner, false) }}
+            style={{ background: resolveBackgroundOverride(DEFAULT_PROMO_BG, promoBanner, { useOverlay: false, ratio: "4:1", width: 1600 }) }}
           >
             <button className="cta-primary" onClick={()=>navigateTo("collection")}>Shop Sale</button>
           </section>

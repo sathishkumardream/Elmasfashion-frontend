@@ -11,6 +11,14 @@ const CLOUDINARY_CLOUD_NAME = process.env.REACT_APP_CLOUDINARY_CLOUD_NAME;
 const CLOUDINARY_UPLOAD_PRESET = process.env.REACT_APP_CLOUDINARY_UPLOAD_PRESET;
 const CLOUDINARY_CONFIGURED = Boolean(CLOUDINARY_CLOUD_NAME && CLOUDINARY_UPLOAD_PRESET);
 
+// Same smart-crop helper as the storefront (src/App.js) — kept in sync so the
+// admin preview shows exactly what the public site will render. See the
+// comment on the App.js copy for the full rationale.
+function cloudinaryFit(url, ratio, targetWidth = 1200) {
+  if (!url || !ratio || !url.includes("res.cloudinary.com") || !url.includes("/upload/")) return url;
+  return url.replace("/upload/", `/upload/c_fill,g_auto,ar_${ratio},w_${targetWidth},q_auto,f_auto/`);
+}
+
 async function uploadImageToCloudinary(file) {
   const formData = new FormData();
   formData.append("file", file);
@@ -1581,16 +1589,20 @@ function CategoryImagesManager({ token }) {
 
             <div className="admin-form-row">
               <label>Category Image</label>
-              <ImageUploader value={draft || ""} onChange={(url) => setDrafts((prev) => ({ ...prev, [cat.key]: url }))} />
+              <ImageUploader
+                value={draft || ""}
+                onChange={(url) => setDrafts((prev) => ({ ...prev, [cat.key]: url }))}
+                hint="Images are automatically optimized and smart-cropped to fit the category card shape — any photo ratio works, no need to pre-crop."
+              />
             </div>
 
             <div className="admin-form-row">
               <label>Preview</label>
               <div
                 style={{
-                  background: draft ? `url("${draft}") center/cover no-repeat` : "linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)",
+                  background: draft ? `url("${cloudinaryFit(draft, "3:2", 500)}") center/cover no-repeat` : "linear-gradient(135deg,#1a1a2e,#16213e,#0f3460)",
                   borderRadius: 12,
-                  minHeight: 140,
+                  aspectRatio: "3 / 2",
                   color: "#fff",
                   display: "flex",
                   flexDirection: "column",
@@ -1628,7 +1640,7 @@ function CategoryImagesManager({ token }) {
 // banner manager below. Text/headline content is passed in as previewContent
 // and is never editable here — only the background.
 // ─────────────────────────────────────────────────────────────────────────────
-function BackgroundEditorCard({ title, subtitle, initial, onSave, previewContent, useOverlay = true, imageHint, previewAspectRatio }) {
+function BackgroundEditorCard({ title, subtitle, initial, onSave, previewContent, useOverlay = true, imageHint, previewAspectRatio, fitRatio }) {
   const [backgroundType, setBackgroundType] = useState(initial.backgroundType || "default");
   const [backgroundImage, setBackgroundImage] = useState(initial.backgroundImage || "");
   const [backgroundColor, setBackgroundColor] = useState(initial.backgroundColor || "#1a1a2e");
@@ -1654,7 +1666,7 @@ function BackgroundEditorCard({ title, subtitle, initial, onSave, previewContent
 
   const previewBg =
     backgroundType === "image" && backgroundImage
-      ? `${useOverlay ? "linear-gradient(rgba(10,14,30,0.55),rgba(10,14,30,0.55)), " : ""}url("${backgroundImage}") center/cover no-repeat`
+      ? `${useOverlay ? "linear-gradient(rgba(10,14,30,0.55),rgba(10,14,30,0.55)), " : ""}url("${cloudinaryFit(backgroundImage, fitRatio, 800)}") center/cover no-repeat`
       : backgroundType === "color" && backgroundColor
       ? backgroundColor
       : initial.defaultPreviewBg;
@@ -1764,6 +1776,8 @@ function HeroSlidesManager({ token }) {
         <BackgroundEditorCard
           key={slide.key}
           title={slide.label}
+          fitRatio="21:9"
+          imageHint="Images are automatically optimized and smart-cropped to fit the wide hero shape — any photo ratio works, no need to pre-crop."
           initial={{ ...data[slide.key], defaultPreviewBg: slide.defaultPreviewBg }}
           onSave={(body) => apiFetch(`/hero-banner/${slide.key}`, { method: "PUT", token, body })}
           previewContent={
@@ -1811,8 +1825,9 @@ function PromoBannerManager({ token }) {
       <BackgroundEditorCard
         title="Background"
         useOverlay={false}
+        fitRatio="4:1"
         previewAspectRatio="4 / 1"
-        imageHint="Recommended image ratio: 4:1 (e.g. 1600×400px) — the banner is wide and short, so tall or square photos will get heavily cropped."
+        imageHint="Images are automatically optimized and smart-cropped to fit this banner's wide 4:1 shape — any photo ratio works, no need to pre-crop. (Pasted external URLs use plain center-crop instead.)"
         initial={{ ...data, defaultPreviewBg: "linear-gradient(135deg, #0d0d14 0%, #1a1a2e 50%, #2d1b4e 100%)" }}
         onSave={(body) => apiFetch("/promo-banner", { method: "PUT", token, body })}
         previewContent={
